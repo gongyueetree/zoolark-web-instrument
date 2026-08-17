@@ -22,9 +22,12 @@ void logic_capture_init(void) {
   sm = pio_claim_unused_sm(pio, true);
   dma_chan = dma_claim_unused_channel(true);
 
+  // Only GPIO22/23 belong to the logic input front end. Do not touch GPIO24..29:
+  // GPIO25 is the heartbeat LED and other pins may be used elsewhere.
   for (uint i = 0; i < ZL_LOGIC_PIN_COUNT; ++i) {
-    pio_gpio_init(pio, ZL_LOGIC_PIN_BASE + i);
-    gpio_pull_down(ZL_LOGIC_PIN_BASE + i);
+    uint pin = ZL_LOGIC_PIN_BASE + i;
+    pio_gpio_init(pio, pin);
+    gpio_disable_pulls(pin); // external I2C sensor pull-ups remain authoritative
   }
 
   pio_sm_config c = logic_capture_8_program_get_default_config(offset);
@@ -39,8 +42,9 @@ void logic_capture_init(void) {
 bool logic_capture_configure(const wfl2_logic_config_t *cfg) {
   if (!cfg || cfg->sample_rate_hz < 1000u || cfg->sample_rate_hz > 50000000u) return false;
   if (!cfg->sample_count || cfg->sample_count > ZL_LOGIC_MAX_SAMPLES) return false;
-  if (cfg->trigger_channel >= 8u) return false;
+  if (cfg->trigger_channel >= ZL_LOGIC_PIN_COUNT) return false;
   g_cfg = *cfg;
+  g_cfg.enabled_mask &= ZL_LOGIC_ENABLED_MASK;
   return true;
 }
 
@@ -100,6 +104,6 @@ uint32_t logic_capture_read(uint32_t capture_id, uint32_t offset_bytes, uint32_t
   uint32_t n = count;
   if (n > dst_cap) n = dst_cap;
   if (offset_bytes + n > s.sample_count) n = s.sample_count - offset_bytes;
-  memcpy(dst, capture_buf + offset_bytes, n);
+  for (uint32_t i = 0; i < n; ++i) dst[i] = capture_buf[offset_bytes + i] & ZL_LOGIC_ENABLED_MASK;
   return n;
 }

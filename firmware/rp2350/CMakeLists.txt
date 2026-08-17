@@ -13,6 +13,7 @@ include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 project(zoolark_rp2350 C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
+list(APPEND PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/include/boards)
 
 pico_sdk_init()
 
@@ -24,32 +25,20 @@ add_executable(zoolark_rp2350
   src/jtag_bitbang.c
 )
 
-target_include_directories(zoolark_rp2350 PRIVATE
-  ${CMAKE_CURRENT_LIST_DIR}/include
-)
+target_include_directories(zoolark_rp2350 PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
 
-pico_generate_pio_header(zoolark_rp2350
-  ${CMAKE_CURRENT_LIST_DIR}/src/logic_capture.pio
-)
+pico_generate_pio_header(zoolark_rp2350 ${CMAKE_CURRENT_LIST_DIR}/src/logic_capture.pio)
 
-target_compile_definitions(zoolark_rp2350 PRIVATE
-  PICO_STDIO_USB=0
-  PICO_STDIO_UART=0
-)
+target_compile_definitions(zoolark_rp2350 PRIVATE PICO_STDIO_USB=0 PICO_STDIO_UART=0)
 
 target_link_libraries(zoolark_rp2350 PRIVATE
-  pico_stdlib
-  pico_unique_id
-  pico_bootrom
-  hardware_pio
-  hardware_dma
-  hardware_clocks
-  hardware_gpio
+  pico_stdlib pico_unique_id pico_bootrom
+  hardware_adc hardware_pio hardware_dma hardware_clocks hardware_gpio
   tinyusb_device
 )
 
 pico_enable_stdio_usb(zoolark_rp2350 0)
 pico_enable_stdio_uart(zoolark_rp2350 0)
-pico_set_program_name(zoolark_rp2350 "ZooLark RP2350 Test Firmware")
-pico_set_program_version(zoolark_rp2350 "0.4.1-heartbeat")
+pico_set_program_name(zoolark_rp2350 "ZooLark RP2350B Live IO Firmware")
+pico_set_program_version(zoolark_rp2350 "0.4.2-live-io")
 pico_add_extra_outputs(zoolark_rp2350)

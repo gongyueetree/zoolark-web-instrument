@@ -8,15 +8,14 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="zh-CN">
-      <head>
-        <link rel="stylesheet" href="/styles.css" />
-      </head>
+      <head><link rel="stylesheet" href="/styles.css" /></head>
       <body>
         {children}
         <Script src="/device/device-stack.js" strategy="afterInteractive" />
         <Script src="/device/firmware-installer.js" strategy="afterInteractive" />
         <Script src="/device/manual-uf2-safe.js" strategy="afterInteractive" />
         <Script src="/app_extended.js" strategy="afterInteractive" />
+        <Script src="/device/live-io-bridge.js" strategy="afterInteractive" />
         <Script src="/device/device-bridge.js" strategy="afterInteractive" />
       </body>
     </html>
