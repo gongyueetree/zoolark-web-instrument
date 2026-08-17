@@ -1,0 +1,11 @@
+{
+  "product": "ZooLark RP2350 Web Instrument",
+  "hardware": "RP2350 / Pico 2 compatible test pinout",
+  "version": "0.4.0-test",
+  "file": "/firmware/zoolark-rp2350b-v0.4.0-test.uf2",
+  "sha256": "fbd5db9771f4df211e4aab2ef5a82be5c327d62b1e27257a47e28b624175d94c",
+  "size": 60416,
+  "usb": {"vid": "0xCAFE", "pid": "0x401F"},
+  "features": ["WFL2", "WebUSB Bulk", "8CH Logic Analyzer", "JTAG Chain Scan", "Enter Bootloader"],
+  "notes": "Test firmware only. FPGA programming is intentionally disabled until a target FPGA family is selected."
+}
