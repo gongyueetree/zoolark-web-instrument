@@ -14,6 +14,7 @@ export default function RootLayout({ children }) {
       <body>
         {children}
         <Script src="/device/device-stack.js" strategy="afterInteractive" />
+        <Script src="/device/firmware-installer.js" strategy="afterInteractive" />
         <Script src="/app_extended.js" strategy="afterInteractive" />
         <Script src="/device/device-bridge.js" strategy="afterInteractive" />
       </body>
