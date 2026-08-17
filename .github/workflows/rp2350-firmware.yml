@@ -28,18 +28,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p public/firmware
-          cp build-rp2350/zoolark_rp2350.uf2 public/firmware/zoolark-rp2350b-v0.4.4-dual-adc.uf2
-          SHA=$(sha256sum public/firmware/zoolark-rp2350b-v0.4.4-dual-adc.uf2 | awk '{print $1}')
-          SIZE=$(stat -c%s public/firmware/zoolark-rp2350b-v0.4.4-dual-adc.uf2)
+          cp build-rp2350/zoolark_rp2350.uf2 public/firmware/zoolark-rp2350b-v0.4.5-dual-adc-dim.uf2
+          SHA=$(sha256sum public/firmware/zoolark-rp2350b-v0.4.5-dual-adc-dim.uf2 | awk '{print $1}')
+          SIZE=$(stat -c%s public/firmware/zoolark-rp2350b-v0.4.5-dual-adc-dim.uf2)
           cat > public/firmware/manifest.json <<EOF
-          {"product":"ZooLark RP2350B Web Instrument","hardware":"RP2350B/QFN-80 dual ADC test","version":"0.4.4-dual-adc","file":"/firmware/zoolark-rp2350b-v0.4.4-dual-adc.uf2","sha256":"$SHA","size":$SIZE,"runtimeUsb":{"vid":"0xCAFE","pid":"0x401F"},"bootloaderUsb":{"vid":"0x2E8A","pid":"0x000F"},"features":["CH1 GPIO47 ADC7","CH2 GPIO45 ADC5","100kS/s/ch dual ADC","KXTJ3 I2C1 GPIO22/23","2x WS2812 GPIO46 20% brightness","GPIO25 heartbeat"],"pinout":{"oscCh1":{"gpio":47,"adc":7},"oscCh2":{"gpio":45,"adc":5},"kxtj3":{"sda":22,"scl":23},"ws2812":{"din":46,"count":2,"brightnessPercent":20},"statusLed":25},"notes":"Both ADC inputs are direct 0..3.3V only. For bipolar AC sources use an external front-end or set generator DC offset near 1.65V."}
+          {"product":"ZooLark RP2350B Web Instrument","hardware":"RP2350B/QFN-80 dual ADC + dim LED test","version":"0.4.5-dual-adc-dim","file":"/firmware/zoolark-rp2350b-v0.4.5-dual-adc-dim.uf2","sha256":"$SHA","size":$SIZE,"runtimeUsb":{"vid":"0xCAFE","pid":"0x401F"},"bootloaderUsb":{"vid":"0x2E8A","pid":"0x000F"},"features":["CH1 GPIO47 ADC7","CH2 GPIO45 ADC5","100kS/s/ch dual ADC","KXTJ3 I2C1 GPIO22/23","2x WS2812 GPIO46 5% brightness","GPIO25 heartbeat","firmware version gate"],"pinout":{"oscCh1":{"gpio":47,"adc":7},"oscCh2":{"gpio":45,"adc":5},"kxtj3":{"sda":22,"scl":23},"ws2812":{"din":46,"count":2,"brightnessPercent":5},"statusLed":25},"notes":"Both ADC inputs are direct 0..3.3V only. Reflash this exact version before using dual-channel live ADC."}
           EOF
       - name: Upload UF2 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zoolark-rp2350b-v0.4.4-dual-adc
+          name: zoolark-rp2350b-v0.4.5-dual-adc-dim
           path: |
-            public/firmware/zoolark-rp2350b-v0.4.4-dual-adc.uf2
+            public/firmware/zoolark-rp2350b-v0.4.5-dual-adc-dim.uf2
             public/firmware/manifest.json
       - name: Commit generated UF2 to main
         shell: bash
@@ -47,8 +47,8 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/firmware/zoolark-rp2350b-v0.4.4-dual-adc.uf2 public/firmware/manifest.json
+          git add public/firmware/zoolark-rp2350b-v0.4.5-dual-adc-dim.uf2 public/firmware/manifest.json
           if git diff --cached --quiet; then echo unchanged; exit 0; fi
-          git commit -m "build: publish RP2350B dual ADC UF2"
+          git commit -m "build: publish RP2350B v0.4.5 dual ADC dim UF2"
           git pull --rebase origin main
           git push origin HEAD:main

@@ -20,6 +20,6 @@ target_compile_definitions(zoolark_rp2350 PRIVATE PICO_STDIO_USB=0 PICO_STDIO_UA
 target_link_libraries(zoolark_rp2350 PRIVATE pico_stdlib pico_unique_id pico_bootrom hardware_adc hardware_i2c hardware_pio hardware_dma hardware_clocks hardware_gpio tinyusb_device)
 pico_enable_stdio_usb(zoolark_rp2350 0)
 pico_enable_stdio_uart(zoolark_rp2350 0)
-pico_set_program_name(zoolark_rp2350 "ZooLark RP2350B Dual ADC Firmware")
-pico_set_program_version(zoolark_rp2350 "0.4.4-dual-adc")
+pico_set_program_name(zoolark_rp2350 "ZooLark RP2350B Dual ADC Dim Firmware")
+pico_set_program_version(zoolark_rp2350 "0.4.5-dual-adc-dim")
 pico_add_extra_outputs(zoolark_rp2350)
