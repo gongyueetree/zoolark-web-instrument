@@ -1,0 +1,6 @@
+.program logic_capture_8
+; Sample 8 consecutive GPIO pins into RX FIFO.
+; Configure IN pin base = D0 GPIO and autopush threshold = 8.
+.wrap_target
+    in pins, 8
+.wrap
