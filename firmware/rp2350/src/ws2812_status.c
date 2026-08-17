@@ -11,12 +11,12 @@ static uint offset;
 static bool ready;
 
 static uint8_t clamp255(int32_t v) { if (v < 0) return 0; if (v > 255) return 255; return (uint8_t)v; }
+static uint8_t dim20(uint8_t v) { return (uint8_t)(((uint16_t)v * ZL_WS2812_BRIGHTNESS_PERCENT + 50u) / 100u); }
 static int32_t iabs32(int32_t v) { return v < 0 ? -v : v; }
-static uint32_t grb(uint8_t r, uint8_t g, uint8_t b) { return ((uint32_t)g << 16) | ((uint32_t)r << 8) | b; }
+static uint32_t grb(uint8_t r, uint8_t g, uint8_t b) { return ((uint32_t)dim20(g) << 16) | ((uint32_t)dim20(r) << 8) | dim20(b); }
 static void put(uint32_t pixel) { pio_sm_put_blocking(pio, sm, pixel << 8u); }
 
 void ws2812_status_init(void) {
-  // RP2350B PIO1 must use GPIO base 16 to reach GPIO46.
   pio_set_gpio_base(pio, 16u);
   offset = pio_add_program(pio, &ws2812_status_program);
   sm = pio_claim_unused_sm(pio, true);
@@ -42,13 +42,11 @@ void ws2812_status_off(void) {
 
 void ws2812_status_update(int16_t x_mg, int16_t y_mg, int16_t z_mg) {
   if (!ready) return;
-  // D1: orientation. +X red, -X blue, |Y| contributes green.
   uint8_t r1 = clamp255((x_mg > 0 ? x_mg : 0) * 255 / 1000);
   uint8_t b1 = clamp255((x_mg < 0 ? -x_mg : 0) * 255 / 1000);
   uint8_t g1 = clamp255(iabs32(y_mg) * 180 / 1000);
   if (r1 < 6 && g1 < 6 && b1 < 6) { r1 = 4; g1 = 4; b1 = 8; }
 
-  // D2: motion magnitude relative to static 1g. green -> yellow -> red.
   int32_t activity = iabs32(x_mg) + iabs32(y_mg) + iabs32(iabs32(z_mg) - 1000);
   uint8_t r2 = 0, g2 = 0, b2 = 0;
   if (activity < 180) { g2 = 28; b2 = 3; }
