@@ -4,7 +4,8 @@
 extern "C" {
 #endif
 
-#define CFG_TUSB_MCU              OPT_MCU_RP2350
+// Do not override CFG_TUSB_MCU here. Pico SDK supplies the correct TinyUSB
+// MCU/DCD selection for PICO_BOARD=pico2 / RP2350 at compile time.
 #define CFG_TUSB_OS               OPT_OS_PICO
 #define CFG_TUSB_RHPORT0_MODE     OPT_MODE_DEVICE
 #define CFG_TUD_ENABLED           1
