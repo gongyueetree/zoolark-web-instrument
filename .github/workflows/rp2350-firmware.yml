@@ -1,0 +1,86 @@
+name: Build RP2350 Test Firmware
+
+on:
+  push:
+    branches: [agent/rp2350-test-firmware]
+    paths:
+      - 'firmware/rp2350/**'
+      - '.github/workflows/rp2350-firmware.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-rp2350:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ZooLark
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout Pico SDK 2.3.0
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: 2.3.0
+          path: .pico-sdk
+          submodules: recursive
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi
+
+      - name: Configure
+        run: >-
+          cmake -S firmware/rp2350 -B build-rp2350 -G Ninja
+          -DPICO_SDK_PATH=$GITHUB_WORKSPACE/.pico-sdk
+          -DPICO_BOARD=pico2
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build UF2
+        run: cmake --build build-rp2350 --parallel
+
+      - name: Publish firmware into web app
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public/firmware
+          cp build-rp2350/zoolark_rp2350.uf2 public/firmware/zoolark-rp2350b-v0.4.0-test.uf2
+          SHA=$(sha256sum public/firmware/zoolark-rp2350b-v0.4.0-test.uf2 | awk '{print $1}')
+          SIZE=$(stat -c%s public/firmware/zoolark-rp2350b-v0.4.0-test.uf2)
+          cat > public/firmware/manifest.json <<EOF
+          {
+            "product": "ZooLark RP2350 Web Instrument",
+            "hardware": "RP2350 / Pico 2 compatible test pinout",
+            "version": "0.4.0-test",
+            "file": "/firmware/zoolark-rp2350b-v0.4.0-test.uf2",
+            "sha256": "$SHA",
+            "size": $SIZE,
+            "usb": {"vid": "0xCAFE", "pid": "0x401F"},
+            "features": ["WFL2", "WebUSB Bulk", "8CH Logic Analyzer", "JTAG Chain Scan", "Enter Bootloader"],
+            "notes": "Test firmware only. FPGA programming is intentionally disabled until a target FPGA family is selected."
+          }
+          EOF
+
+      - name: Upload UF2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zoolark-rp2350-v0.4.0-test
+          path: |
+            public/firmware/zoolark-rp2350b-v0.4.0-test.uf2
+            public/firmware/manifest.json
+
+      - name: Commit generated UF2 to branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/firmware/zoolark-rp2350b-v0.4.0-test.uf2 public/firmware/manifest.json
+          if git diff --cached --quiet; then
+            echo "Firmware output unchanged"
+          else
+            git commit -m "build: publish RP2350 test UF2 [skip ci]"
+            git push origin HEAD:agent/rp2350-test-firmware
+          fi
