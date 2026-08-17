@@ -51,31 +51,32 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p public/firmware
-          cp build-rp2350/zoolark_rp2350.uf2 public/firmware/zoolark-rp2350b-v0.4.0-test.uf2
-          SHA=$(sha256sum public/firmware/zoolark-rp2350b-v0.4.0-test.uf2 | awk '{print $1}')
-          SIZE=$(stat -c%s public/firmware/zoolark-rp2350b-v0.4.0-test.uf2)
+          cp build-rp2350/zoolark_rp2350.uf2 public/firmware/zoolark-rp2350b-v0.4.1-heartbeat.uf2
+          SHA=$(sha256sum public/firmware/zoolark-rp2350b-v0.4.1-heartbeat.uf2 | awk '{print $1}')
+          SIZE=$(stat -c%s public/firmware/zoolark-rp2350b-v0.4.1-heartbeat.uf2)
           cat > public/firmware/manifest.json <<EOF
           {
             "product": "ZooLark RP2350 Web Instrument",
             "hardware": "RP2350B / Pico 2 compatible test pinout",
-            "version": "0.4.0-test",
-            "file": "/firmware/zoolark-rp2350b-v0.4.0-test.uf2",
+            "version": "0.4.1-heartbeat",
+            "file": "/firmware/zoolark-rp2350b-v0.4.1-heartbeat.uf2",
             "sha256": "$SHA",
             "size": $SIZE,
             "runtimeUsb": {"vid": "0xCAFE", "pid": "0x401F"},
             "bootloaderUsb": {"vid": "0x2E8A", "pid": "0x000F"},
-            "features": ["WFL2", "WebUSB Bulk", "8CH Logic Analyzer", "JTAG Chain Scan", "Enter Bootloader"],
+            "features": ["WFL2", "WebUSB Bulk", "8CH Logic Analyzer", "JTAG Chain Scan", "Enter Bootloader", "GPIO25 1Hz Heartbeat"],
             "pinout": {"logic": "GPIO0-GPIO7", "jtag": {"TCK": 10, "TMS": 11, "TDI": 12, "TDO": 13}, "statusLed": 25},
-            "notes": "Test firmware. Runtime uses CAFE:401F; RP2350 ROM BOOTSEL remains 2E8A:000F."
+            "heartbeat": {"pin": 25, "periodMs": 1000, "onMs": 100, "activeHigh": true},
+            "notes": "Heartbeat build: GPIO25 is HIGH for 100 ms once every second. Runtime uses CAFE:401F."
           }
           EOF
 
       - name: Upload UF2 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zoolark-rp2350-v0.4.0-test
+          name: zoolark-rp2350-v0.4.1-heartbeat
           path: |
-            public/firmware/zoolark-rp2350b-v0.4.0-test.uf2
+            public/firmware/zoolark-rp2350b-v0.4.1-heartbeat.uf2
             public/firmware/manifest.json
 
       - name: Commit generated UF2 to main
@@ -84,11 +85,11 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/firmware/zoolark-rp2350b-v0.4.0-test.uf2 public/firmware/manifest.json
+          git add public/firmware/zoolark-rp2350b-v0.4.1-heartbeat.uf2 public/firmware/manifest.json
           if git diff --cached --quiet; then
             echo "Firmware output unchanged"
             exit 0
           fi
-          git commit -m "build: publish RP2350 test UF2"
+          git commit -m "build: publish RP2350 heartbeat UF2"
           git pull --rebase origin main
           git push origin HEAD:main

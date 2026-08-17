@@ -16,10 +16,12 @@
 #define TX_FRAME_SIZE 1536u
 #define LOGIC_READ_MAX 1024u
 
+#define HEARTBEAT_PERIOD_MS 1000u
+#define HEARTBEAT_ON_MS      100u
+
 static uint8_t rx_stage[RX_STAGE_SIZE];
 static size_t rx_used = 0;
 static bool enter_bootloader_pending = false;
-static uint32_t led_deadline = 0;
 static bool led_state = false;
 
 static inline uint16_t rd16(const uint8_t *p) { return (uint16_t)p[0] | ((uint16_t)p[1] << 8); }
@@ -65,10 +67,10 @@ static void handle_command(const wfl2_header_t *req, const uint8_t *payload) {
     case WFL2_GET_DEVICE_INFO: {
       size_t off = 0, n;
       n = tlv_text(out + off, sizeof(out)-off, 1, "ZooLark RP2350 Web Instrument"); off += n;
-      n = tlv_text(out + off, sizeof(out)-off, 2, "0.4.0-test"); off += n;
+      n = tlv_text(out + off, sizeof(out)-off, 2, "0.4.1-heartbeat"); off += n;
       n = tlv_text(out + off, sizeof(out)-off, 3, "ZL-RP2350-TEST-0001"); off += n;
       n = tlv_text(out + off, sizeof(out)-off, 4, "USB Full-Speed Vendor Bulk"); off += n;
-      n = tlv_text(out + off, sizeof(out)-off, 5, "LA8,JTAG-SCAN,BOOTLOADER"); off += n;
+      n = tlv_text(out + off, sizeof(out)-off, 5, "LA8,JTAG-SCAN,BOOTLOADER,HEARTBEAT-GPIO25"); off += n;
       out_len = (uint32_t)off;
       break;
     }
@@ -123,7 +125,7 @@ static void handle_command(const wfl2_header_t *req, const uint8_t *payload) {
       uint32_t ids[8]; uint8_t count = jtag_scan_idcodes(ids, 8); size_t off = 0; out[off++] = count;
       for (uint8_t i = 0; i < count; ++i) {
         wr32(out + off, ids[i]); off += 4;
-        out[off++] = 0; // IR length unknown in generic scan
+        out[off++] = 0;
         out[off++] = 0;
         char name[24]; snprintf(name, sizeof(name), "JTAG ID 0x%08lx", (unsigned long)ids[i]);
         size_t len = strlen(name); out[off++] = (uint8_t)len; memcpy(out + off, name, len); off += len;
@@ -186,17 +188,23 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
   return false;
 }
 
+// Heartbeat: one short pulse per second. GPIO25 HIGH for 100 ms, LOW for 900 ms.
+// This is deliberately independent of USB state so the LED proves the application
+// firmware and main loop are alive even before WebUSB is connected.
 static void led_task(void) {
   uint32_t now = to_ms_since_boot(get_absolute_time());
-  uint32_t period = tud_mounted() ? 800u : 200u;
-  if ((int32_t)(now - led_deadline) >= 0) {
-    led_deadline = now + period; led_state = !led_state; gpio_put(ZL_STATUS_LED_PIN, led_state);
+  bool next_state = (now % HEARTBEAT_PERIOD_MS) < HEARTBEAT_ON_MS;
+  if (next_state != led_state) {
+    led_state = next_state;
+    gpio_put(ZL_STATUS_LED_PIN, led_state);
   }
 }
 
 int main(void) {
   stdio_init_all();
-  gpio_init(ZL_STATUS_LED_PIN); gpio_set_dir(ZL_STATUS_LED_PIN, GPIO_OUT);
+  gpio_init(ZL_STATUS_LED_PIN);
+  gpio_set_dir(ZL_STATUS_LED_PIN, GPIO_OUT);
+  gpio_put(ZL_STATUS_LED_PIN, 0);
   logic_capture_init();
   jtag_init();
   tusb_init();

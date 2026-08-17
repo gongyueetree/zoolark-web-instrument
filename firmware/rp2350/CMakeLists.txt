@@ -51,5 +51,5 @@ target_link_libraries(zoolark_rp2350 PRIVATE
 pico_enable_stdio_usb(zoolark_rp2350 0)
 pico_enable_stdio_uart(zoolark_rp2350 0)
 pico_set_program_name(zoolark_rp2350 "ZooLark RP2350 Test Firmware")
-pico_set_program_version(zoolark_rp2350 "0.4.0-test")
+pico_set_program_version(zoolark_rp2350 "0.4.1-heartbeat")
 pico_add_extra_outputs(zoolark_rp2350)
