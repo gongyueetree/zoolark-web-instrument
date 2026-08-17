@@ -1,14 +1,1 @@
-{
-  "product": "ZooLark RP2350B Web Instrument",
-  "hardware": "RP2350B / QFN-80 live-I/O test pinout",
-  "version": "0.4.2-live-io",
-  "file": "/firmware/zoolark-rp2350b-v0.4.2-live-io.uf2",
-  "sha256": "a118fdfa5f261c36e172f773ba350beb1e897f698fea5cafb5d9f1457fb26e7d",
-  "size": 61952,
-  "runtimeUsb": {"vid": "0xCAFE", "pid": "0x401F"},
-  "bootloaderUsb": {"vid": "0x2E8A", "pid": "0x000F"},
-  "features": ["WFL2", "WebUSB Bulk", "GPIO47 ADC7 Oscilloscope", "GPIO22/23 Logic", "JTAG Chain Scan", "GPIO25 Heartbeat"],
-  "pinout": {"oscCh1": {"gpio":47,"adc":7}, "logic": {"D0":22,"D1":23}, "jtag": {"TCK":10,"TMS":11,"TDI":12,"TDO":13}, "statusLed":25},
-  "heartbeat": {"pin":25,"periodMs":1000,"onMs":100,"activeHigh":true},
-  "notes": "Live IO build. ADC input is direct 0..3.3V only. D0/D1 intended for an external I2C motion sensor SDA/SCL."
-}
+{"product":"ZooLark RP2350B Web Instrument","hardware":"RP2350B/QFN-80 KXTJ3 live test","version":"0.4.3-kxtj3","file":"/firmware/zoolark-rp2350b-v0.4.3-kxtj3.uf2","sha256":"f3d3e2ab2d765d05833cd2d8826ab0a0bca863d7c4f262be4cde7a3051897cde","size":66560,"runtimeUsb":{"vid":"0xCAFE","pid":"0x401F"},"bootloaderUsb":{"vid":"0x2E8A","pid":"0x000F"},"features":["GPIO47 ADC7","KXTJ3-1057 I2C1 GPIO22/23","I2C logic decode","2x WS2812 GPIO46","GPIO25 heartbeat"],"pinout":{"oscCh1":{"gpio":47,"adc":7},"kxtj3":{"sda":22,"scl":23,"address":"0x0E","whoAmI":"0x35"},"ws2812":{"din":46,"count":2},"statusLed":25},"notes":"KXTJ3 High Resolution 12-bit ±2g, ODR 200Hz. Logic PIO passively observes the I2C pins."}
