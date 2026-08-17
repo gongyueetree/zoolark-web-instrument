@@ -89,6 +89,6 @@ jobs:
             echo "Firmware output unchanged"
             exit 0
           fi
-          git commit -m "build: publish RP2350 test UF2 [skip ci]"
+          git commit -m "build: publish RP2350 test UF2"
           git pull --rebase origin main
           git push origin HEAD:main
