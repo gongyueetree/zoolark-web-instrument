@@ -1,14 +1,14 @@
 {
-  "product": "ZooLark RP2350 Web Instrument",
-  "hardware": "RP2350B / Pico 2 compatible test pinout",
-  "version": "0.4.1-heartbeat",
-  "file": "/firmware/zoolark-rp2350b-v0.4.1-heartbeat.uf2",
-  "sha256": "70b18cf848c4dbdae9a7d7ac5cd1ce7d3e33ac04fd63ce6fc400162b2b334956",
-  "size": 60416,
+  "product": "ZooLark RP2350B Web Instrument",
+  "hardware": "RP2350B / QFN-80 live-I/O test pinout",
+  "version": "0.4.2-live-io",
+  "file": "/firmware/zoolark-rp2350b-v0.4.2-live-io.uf2",
+  "sha256": "a118fdfa5f261c36e172f773ba350beb1e897f698fea5cafb5d9f1457fb26e7d",
+  "size": 61952,
   "runtimeUsb": {"vid": "0xCAFE", "pid": "0x401F"},
   "bootloaderUsb": {"vid": "0x2E8A", "pid": "0x000F"},
-  "features": ["WFL2", "WebUSB Bulk", "8CH Logic Analyzer", "JTAG Chain Scan", "Enter Bootloader", "GPIO25 1Hz Heartbeat"],
-  "pinout": {"logic": "GPIO0-GPIO7", "jtag": {"TCK": 10, "TMS": 11, "TDI": 12, "TDO": 13}, "statusLed": 25},
-  "heartbeat": {"pin": 25, "periodMs": 1000, "onMs": 100, "activeHigh": true},
-  "notes": "Heartbeat build: GPIO25 is HIGH for 100 ms once every second. Runtime uses CAFE:401F."
+  "features": ["WFL2", "WebUSB Bulk", "GPIO47 ADC7 Oscilloscope", "GPIO22/23 Logic", "JTAG Chain Scan", "GPIO25 Heartbeat"],
+  "pinout": {"oscCh1": {"gpio":47,"adc":7}, "logic": {"D0":22,"D1":23}, "jtag": {"TCK":10,"TMS":11,"TDI":12,"TDO":13}, "statusLed":25},
+  "heartbeat": {"pin":25,"periodMs":1000,"onMs":100,"activeHigh":true},
+  "notes": "Live IO build. ADC input is direct 0..3.3V only. D0/D1 intended for an external I2C motion sensor SDA/SCL."
 }
