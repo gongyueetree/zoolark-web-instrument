@@ -1,20 +1,11 @@
 name: RP2350 Firmware
-
 on:
   push:
     branches: [main]
-    paths:
-      - 'firmware/rp2350/**'
-      - '.github/workflows/rp2350-firmware.yml'
+    paths: ['firmware/rp2350/**','.github/workflows/rp2350-firmware.yml']
   workflow_dispatch:
-
-permissions:
-  contents: write
-
-concurrency:
-  group: rp2350-firmware-main
-  cancel-in-progress: true
-
+permissions: { contents: write }
+concurrency: { group: rp2350-firmware-main, cancel-in-progress: true }
 jobs:
   build-rp2350:
     runs-on: ubuntu-latest
@@ -22,72 +13,42 @@ jobs:
     steps:
       - name: Checkout ZooLark
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
+        with: { fetch-depth: 0 }
       - name: Checkout Pico SDK 2.3.0
         uses: actions/checkout@v4
-        with:
-          repository: raspberrypi/pico-sdk
-          ref: 2.3.0
-          path: .pico-sdk
-          submodules: recursive
-
+        with: { repository: raspberrypi/pico-sdk, ref: 2.3.0, path: .pico-sdk, submodules: recursive }
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi
-
       - name: Configure RP2350B
-        run: >-
-          cmake -S firmware/rp2350 -B build-rp2350 -G Ninja
-          -DPICO_SDK_PATH=$GITHUB_WORKSPACE/.pico-sdk
-          -DPICO_BOARD=zoolark_rp2350b
-          -DPICO_BOARD_HEADER_DIRS=$GITHUB_WORKSPACE/firmware/rp2350/include/boards
-          -DCMAKE_BUILD_TYPE=Release
-
+        run: cmake -S firmware/rp2350 -B build-rp2350 -G Ninja -DPICO_SDK_PATH=$GITHUB_WORKSPACE/.pico-sdk -DPICO_BOARD=zoolark_rp2350b -DPICO_BOARD_HEADER_DIRS=$GITHUB_WORKSPACE/firmware/rp2350/include/boards -DCMAKE_BUILD_TYPE=Release
       - name: Build UF2
         run: cmake --build build-rp2350 --parallel
-
       - name: Publish firmware into web app
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p public/firmware
-          cp build-rp2350/zoolark_rp2350.uf2 public/firmware/zoolark-rp2350b-v0.4.2-live-io.uf2
-          SHA=$(sha256sum public/firmware/zoolark-rp2350b-v0.4.2-live-io.uf2 | awk '{print $1}')
-          SIZE=$(stat -c%s public/firmware/zoolark-rp2350b-v0.4.2-live-io.uf2)
+          cp build-rp2350/zoolark_rp2350.uf2 public/firmware/zoolark-rp2350b-v0.4.3-kxtj3.uf2
+          SHA=$(sha256sum public/firmware/zoolark-rp2350b-v0.4.3-kxtj3.uf2 | awk '{print $1}')
+          SIZE=$(stat -c%s public/firmware/zoolark-rp2350b-v0.4.3-kxtj3.uf2)
           cat > public/firmware/manifest.json <<EOF
-          {
-            "product": "ZooLark RP2350B Web Instrument",
-            "hardware": "RP2350B / QFN-80 live-I/O test pinout",
-            "version": "0.4.2-live-io",
-            "file": "/firmware/zoolark-rp2350b-v0.4.2-live-io.uf2",
-            "sha256": "$SHA",
-            "size": $SIZE,
-            "runtimeUsb": {"vid": "0xCAFE", "pid": "0x401F"},
-            "bootloaderUsb": {"vid": "0x2E8A", "pid": "0x000F"},
-            "features": ["WFL2", "WebUSB Bulk", "GPIO47 ADC7 Oscilloscope", "GPIO22/23 Logic", "JTAG Chain Scan", "GPIO25 Heartbeat"],
-            "pinout": {"oscCh1": {"gpio":47,"adc":7}, "logic": {"D0":22,"D1":23}, "jtag": {"TCK":10,"TMS":11,"TDI":12,"TDO":13}, "statusLed":25},
-            "heartbeat": {"pin":25,"periodMs":1000,"onMs":100,"activeHigh":true},
-            "notes": "Live IO build. ADC input is direct 0..3.3V only. D0/D1 intended for an external I2C motion sensor SDA/SCL."
-          }
+          {"product":"ZooLark RP2350B Web Instrument","hardware":"RP2350B/QFN-80 KXTJ3 live test","version":"0.4.3-kxtj3","file":"/firmware/zoolark-rp2350b-v0.4.3-kxtj3.uf2","sha256":"$SHA","size":$SIZE,"runtimeUsb":{"vid":"0xCAFE","pid":"0x401F"},"bootloaderUsb":{"vid":"0x2E8A","pid":"0x000F"},"features":["GPIO47 ADC7","KXTJ3-1057 I2C1 GPIO22/23","I2C logic decode","2x WS2812 GPIO46","GPIO25 heartbeat"],"pinout":{"oscCh1":{"gpio":47,"adc":7},"kxtj3":{"sda":22,"scl":23,"address":"0x0E","whoAmI":"0x35"},"ws2812":{"din":46,"count":2},"statusLed":25},"notes":"KXTJ3 High Resolution 12-bit ±2g, ODR 200Hz. Logic PIO passively observes the I2C pins."}
           EOF
-
       - name: Upload UF2 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zoolark-rp2350b-v0.4.2-live-io
+          name: zoolark-rp2350b-v0.4.3-kxtj3
           path: |
-            public/firmware/zoolark-rp2350b-v0.4.2-live-io.uf2
+            public/firmware/zoolark-rp2350b-v0.4.3-kxtj3.uf2
             public/firmware/manifest.json
-
       - name: Commit generated UF2 to main
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/firmware/zoolark-rp2350b-v0.4.2-live-io.uf2 public/firmware/manifest.json
-          if git diff --cached --quiet; then echo "Firmware output unchanged"; exit 0; fi
-          git commit -m "build: publish RP2350B live IO UF2"
+          git add public/firmware/zoolark-rp2350b-v0.4.3-kxtj3.uf2 public/firmware/manifest.json
+          if git diff --cached --quiet; then echo unchanged; exit 0; fi
+          git commit -m "build: publish RP2350B KXTJ3 UF2"
           git pull --rebase origin main
           git push origin HEAD:main
