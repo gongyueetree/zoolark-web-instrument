@@ -1,19 +1,45 @@
-name: CI
+name: Web CI
 
 on:
   push:
     branches: [main, master]
+    paths-ignore:
+      - 'firmware/**'
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
+    paths-ignore:
+      - 'firmware/**'
+      - 'docs/**'
+      - '**/*.md'
+
+concurrency:
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test-and-build:
+  device-protocol-smoke:
+    name: Device protocol smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm install
-      - run: npm run check:device
-      - run: npm run build
+      - name: Run transport/protocol smoke test
+        run: node scripts/device-stack-smoke.mjs
+
+  web-build:
+    name: Next.js build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --prefer-offline
+      - name: Build Next.js app
+        run: npm run build
