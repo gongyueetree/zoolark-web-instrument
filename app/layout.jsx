@@ -15,8 +15,7 @@ export default function RootLayout({ children }) {
         {children}
         <Script src="/device/device-stack.js" strategy="afterInteractive" />
         <Script src="/device/firmware-installer.js" strategy="afterInteractive" />
-        <Script src="/device/uf2-install-guard.js" strategy="afterInteractive" />
-        <Script src="/device/runtime-ui-sync.js" strategy="afterInteractive" />
+        <Script src="/device/manual-uf2-safe.js" strategy="afterInteractive" />
         <Script src="/app_extended.js" strategy="afterInteractive" />
         <Script src="/device/device-bridge.js" strategy="afterInteractive" />
       </body>
