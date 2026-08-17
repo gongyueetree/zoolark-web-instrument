@@ -1,13 +1,14 @@
 {
   "product": "ZooLark RP2350 Web Instrument",
   "hardware": "RP2350B / Pico 2 compatible test pinout",
-  "version": "0.4.0-test",
-  "file": "/firmware/zoolark-rp2350b-v0.4.0-test.uf2",
-  "sha256": "fbd5db9771f4df211e4aab2ef5a82be5c327d62b1e27257a47e28b624175d94c",
+  "version": "0.4.1-heartbeat",
+  "file": "/firmware/zoolark-rp2350b-v0.4.1-heartbeat.uf2",
+  "sha256": "70b18cf848c4dbdae9a7d7ac5cd1ce7d3e33ac04fd63ce6fc400162b2b334956",
   "size": 60416,
   "runtimeUsb": {"vid": "0xCAFE", "pid": "0x401F"},
   "bootloaderUsb": {"vid": "0x2E8A", "pid": "0x000F"},
-  "features": ["WFL2", "WebUSB Bulk", "8CH Logic Analyzer", "JTAG Chain Scan", "Enter Bootloader"],
+  "features": ["WFL2", "WebUSB Bulk", "8CH Logic Analyzer", "JTAG Chain Scan", "Enter Bootloader", "GPIO25 1Hz Heartbeat"],
   "pinout": {"logic": "GPIO0-GPIO7", "jtag": {"TCK": 10, "TMS": 11, "TDI": 12, "TDO": 13}, "statusLed": 25},
-  "notes": "Test firmware. Runtime uses CAFE:401F; RP2350 ROM BOOTSEL remains 2E8A:000F."
+  "heartbeat": {"pin": 25, "periodMs": 1000, "onMs": 100, "activeHigh": true},
+  "notes": "Heartbeat build: GPIO25 is HIGH for 100 ms once every second. Runtime uses CAFE:401F."
 }
