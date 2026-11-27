@@ -42,10 +42,34 @@ test('reject synthetic data, wrong count and corrupt ADC rate',()=>{
     const data=zp();data[offset]=value;assert.throws(()=>rawFrame(data));
   }
 });
-test('R149 is verified by FW_BUILD before writes',async()=>{
-  const {link,log}=serial(cmd=>line(cmd==='DBG?'?'DBG|STATUS|FW_BUILD=R144|ADC=REAL|INPUT=REAL':identity(cmd)));
-  await link.open();const board=new Instrument(link);await assert.rejects(board.identify(),/R144/);
-  await assert.rejects(board.output('dc','on'));assert.deepEqual(log,['*IDN?','DBG?']);await link.close();
+const r144='HW21_R144_USB_BOOT_20261124';
+for (const [build,release] of [[r144,'R144'],[BUILD,'R149']]) {
+  test(release+' connects using FW_BUILD and reads WAV settings without enabling output',async()=>{
+    const {link,log}=serial(cmd=>line(({
+      'DBG?':'DBG|STATUS|ENABLED=0|INPUT=REAL|ADC=REAL|BUILD=HW21_R108_SD_RATES_20261111|FW_BUILD='+build+'|UI_BUILD='+r144,
+      'LINK:STATE?':'LINK|PAGE=2|TDIV=8|VDIV=7|TDIV_US=500|VIEW_MV=200|SCOPE_RUN=0|SD_ACTIVE=0|RUN=0|ANIM=0|SD_RATE=500000|SD_PAIRS=0|CHANNELS=3',
+      'FUNC:PARAMS?':'FUNC:WAVE=2;AMP_DV=40;FREQ_TKHZ=100;FREQ_HZ=10000;OFFSET_DV=0',
+      'FUNC:STATUS?':'FUNC:ACTIVE=1;FAULT=0;HZ=10000.000;BIT_HZ=60000000;PEAK_PCT=50',
+    })[cmd]||identity(cmd)));
+    await link.open();
+    try{
+      const board=new Instrument(link);
+      const info=await board.identify();
+      assert.equal(info.build,build);assert.equal(info.release,release);assert.equal(info.state.VDIV,'7');
+      assert.deepEqual(await board.output('wav','read'),{wave:2,hz:10000,amp:40,offset:0,peak:50,on:1,fault:0});
+      assert.deepEqual(log,['*IDN?','DBG?','LINK:STATE?','FUNC:PARAMS?','FUNC:STATUS?']);
+    }finally{await link.close();}
+  });
+}
+test('a familiar UI_BUILD cannot authorize an unknown FW_BUILD or synthetic ADC',async()=>{
+  for (const [build,adc,expected] of [['HW21_R144_CUSTOM','REAL',/HW21_R144_CUSTOM/],[r144,'SYNTHETIC',/SYNTHETIC/]]) {
+    const {link,log}=serial(cmd=>line(cmd==='DBG?'?'DBG|STATUS|FW_BUILD='+build+'|UI_BUILD='+r144+'|ADC='+adc+'|INPUT=REAL':identity(cmd)));
+    await link.open();const board=new Instrument(link);
+    try{
+      await assert.rejects(board.identify(),expected);
+      await assert.rejects(board.output('dc','on'));assert.deepEqual(log,['*IDN?','DBG?']);
+    }finally{await link.close();}
+  }
 });
 test('timed out command closes the session and releases both streams',async()=>{
   const {link}=serial(()=>[]);await link.open();await assert.rejects(link.query('PING','PONG',20),/超时/);

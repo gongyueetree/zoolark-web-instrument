@@ -2,6 +2,10 @@ import { fields, integer, rawFrame, requireWire, rollWindow, snapshot, TIME_US, 
 import { DeviceRefusal } from './serial.mjs';
 
 export const BUILD = 'HW21_R149_USB_HANDOFF_RECONNECT_20261125';
+const releases = new Map([
+  ['HW21_R144_USB_BOOT_20261124', 'R144'],
+  [BUILD, 'R149'],
+]);
 export const USB = {usbVendorId:0xcafe,usbProductId:0x4001};
 const delay = ms => new Promise(resolve=>setTimeout(resolve,ms));
 const pageFor = {wav:2,pwm:3,dc:9};
@@ -22,15 +26,20 @@ export class Instrument {
   }
   query(cmd,prefix) { return this.link.query(cmd,prefix); }
   async state() { return checkState(await this.query('LINK:STATE?','LINK|')); }
-  async identify() {
+  async identify(report=()=>{}) {
+    this.verified=false;
+    report('读取板型（*IDN?）');
     const id=await this.query('*IDN?','ZoolarkPro,');
     requireWire(id.split(',')[1]==='ODK_SPILCD_RP2350_V2.1','设备型号不匹配 · '+id);
+    report('读取固件（DBG?）');
     const dbg=fields(await this.query('DBG?','DBG|STATUS|'),'DBG|STATUS|');
-    requireWire(dbg.FW_BUILD===BUILD,'当前固件 '+(dbg.FW_BUILD||'未知')+'，本工作台需要 HW21 R149');
-    requireWire(dbg.ADC==='REAL' && dbg.INPUT==='REAL','板端处于模拟输入模式');
+    const release=releases.get(dbg.FW_BUILD);
+    requireWire(release,'板端 FW_BUILD 为 '+(dbg.FW_BUILD||'未知')+'，此工作台支持 HW2.1 R144 和 R149 的交付版本');
+    requireWire(dbg.ADC==='REAL' && dbg.INPUT==='REAL',release+' 板端未处于实采模式 · INPUT='+dbg.INPUT+'，ADC='+dbg.ADC);
+    report(release+' 读取板端状态（LINK:STATE?）');
     const state=await this.state();
     this.verified=true;
-    return {id,build:dbg.FW_BUILD,state};
+    return {id,build:dbg.FW_BUILD,release,state};
   }
   async page(page) {
     requireWire(this.verified,'设备身份尚未验证');

@@ -1,10 +1,10 @@
 # OpenScope RP2350B 实板工作台
 
-首页的 **OpenScope 实板** 和连接对话框的 **OpenScope / R149** 均通往 `/openscope`。选择桌面 Chrome 或 Edge，通过 HTTPS 或 localhost 打开。先关闭 ZooLark Pro Display 及串口终端，用数据线接 J3，仪器正常开机后点击 **连接 USB 仪器**。设备选择器仅列出 USB VID:PID 为 `CAFE:4001` 的 CDC 端口。板端开机流程可能已启用 WAV，接线前在 WAV 页读取或关闭输出。
+首页的 **OpenScope 实板** 和连接对话框的 **OpenScope / R144 · R149** 均通往 `/openscope`。选择桌面 Chrome 或 Edge，通过 HTTPS 或 localhost 打开。先关闭 ZooLark Pro Display 及串口终端，用数据线接 J3，仪器正常开机后点击 **连接 USB 仪器**。设备选择器仅列出 USB VID:PID 为 `CAFE:4001` 的 CDC 端口。板端开机流程可能已启用 WAV，接线前在 WAV 页读取或关闭输出。
 
 ## 身份与硬件
 
-接口依据来自 OpenScope_RP2350B V2.2 的 PCB / 原理图、标为 HW2.1 的 R149 固件和 Display 0.29.6。网页核对 `*IDN?` 中的产品及板型，再核对 `DBG?` 的 `FW_BUILD=HW21_R149_USB_HANDOFF_RECONNECT_20261125`、`INPUT=REAL`、`ADC=REAL`。兼容 IDN 的旧版本字段和 UI_BUILD 都不代表当前固件。连接时不写输出。网页没有读取 PCB 修订号的硬件接口，具体 V2.2 样机需做回环验收。
+接口依据来自 OpenScope_RP2350B V2.2 的 PCB / 原理图、交付包中的 HW2.1 R144/R149 UF2、R149 源码和 Display 0.29.6。网页先用 `*IDN?` 核对板型，然后以 `DBG?` 的 `FW_BUILD` 识别完整构建号：`HW21_R144_USB_BOOT_20261124` 或 `HW21_R149_USB_HANDOFF_RECONNECT_20261125`。两个版本可返回相同的 `UI_BUILD`。网页继续核对 `INPUT=REAL`、`ADC=REAL` 以及 `LINK:STATE?` 的时基和量程后，在顶部显示实际连接版本。连接只查询设备；切换仪器页会保留连接错误。网页没有读取 PCB 修订号的硬件接口，具体 V2.2 样机需做回环验收。
 
 | J1 引脚 | 信号 | 路径 |
 |---|---|---|
@@ -36,4 +36,4 @@
 
 ## 验证记录
 
-`npm test` 包含旧 WFL2 smoke 和 R149 协议回归。开发时另用 Display 交接包中 12 个 ZP23 原始采集文件和 12 个 A34 V2 线缆报文验证了解码。它们是历史采样，V2.2 的 USB 枚举、模拟幅度、端口映射和外部反馈仍需用本次目标板检查。此工作台没有移植板端 SD 文件管理、桌面协议解码器或给 R149 增加 JTAG 命令。
+`npm test` 包含旧 WFL2 smoke 和 R144/R149 协议回归。开发时另用 Display 交接包中 12 个 ZP23 原始采集文件和 12 个 A34 V2 线缆报文验证了解码。它们是历史采样，V2.2 的 USB 枚举、模拟幅度、端口映射和外部反馈仍需用本次目标板检查。此工作台没有移植板端 SD 文件管理、桌面协议解码器或给 R149 增加 JTAG 命令。

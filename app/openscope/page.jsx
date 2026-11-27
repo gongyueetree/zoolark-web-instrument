@@ -17,7 +17,8 @@ const pinout=[
   ['15 / 16 / 17 / 18','D0 / D1 / D2 / D3','GPIO18 / 17 / 20 / 19','20'],
 ];
 export default function OpenScope(){
-  const [board,setBoard]=useState(null),[identity,setIdentity]=useState(null),[msg,setMsg]=useState('选择已运行 R149 的仪器串口。'),[error,setError]=useState(false);
+  const [board,setBoard]=useState(null),[identity,setIdentity]=useState(null),[msg,setMsg]=useState(''),[error,setError]=useState(false);
+  const [connection,setConnection]=useState({text:'',failed:false});
   const [busy,setBusy]=useState(false),[acquiring,setAcquiring]=useState(false),[mode,setMode]=useState('A12');
   const [td,setTd]=useState(6),[vd,setVd]=useState(4),[rate,setRate]=useState(50000),[laRate,setLaRate]=useState(1000000);
   const [source,setSource]=useState(0),[edge,setEdge]=useState('rise'),[level,setLevel]=useState('0');
@@ -28,7 +29,7 @@ export default function OpenScope(){
   function clearDevice(){setBoard(null);setIdentity(null);setFrame(null);setBattery(null);setFra([]);}
   function drop(text,isError){
     generation.current++;active.current?.abort();active.current=null;lock.current=false;
-    setBusy(false);setAcquiring(false);clearDevice();message(text,isError);
+    setBusy(false);setAcquiring(false);clearDevice();message('');setConnection({text,failed:isError});
   }
   async function disconnect(){
     const link=owner.current;
@@ -51,32 +52,44 @@ export default function OpenScope(){
   async function connect(){
     if(lock.current)return;
     const generationAtOpen=generation.current;
-    await run(async()=>{
+    let link,ready=false,stage='';
+    const report=text=>{
+      stage=text;
+      if(generationAtOpen===generation.current)setConnection({text,failed:false});
+    };
+    lock.current=true;setBusy(true);message('');
+    try{
+      report('选择 USB 仪器串口');
       if(!window.isSecureContext || !navigator.serial)throw new Error('请在桌面 Chrome 或 Edge 中，通过 HTTPS 或 localhost 打开此页。');
       let port;
       try {port=await navigator.serial.requestPort({filters:[USB]});}
       catch(e){if(e.name==='NotFoundError')throw new Error('未选择仪器。请确认使用 USB 数据线，并在仪器完成启动后重试。');throw e;}
-      // A chooser match alone does not identify the loaded firmware.
-      const link=new SerialLink(port,e=>{
-        if(owner.current===link){drop('串口中断 · '+e.message+'。板端录制或导出完成后可重新连接。',true);}
+      if(generationAtOpen!==generation.current)return;
+      report('打开 USB 串口');
+      link=new SerialLink(port,e=>{
+        if(ready && owner.current===link)drop('串口中断 · '+e.message,true);
       });
       owner.current=link;
       const device=new Instrument(link);
-      try{
-        await link.open();
-        const info=await device.identify();
-        if(generationAtOpen!==generation.current)throw new Error('连接已取消');
-        setIdentity(info);setBoard(device);setTd(+info.state.TDIV);setVd(+info.state.VDIV);
-      } catch(e) {
+      await link.open();
+      const info=await device.identify(report);
+      if(generationAtOpen!==generation.current)return;
+      ready=true;
+      setIdentity(info);setBoard(device);setTd(+info.state.TDIV);setVd(+info.state.VDIV);
+      setConnection({text:'',failed:false});
+    }catch(e){
+      if(generationAtOpen===generation.current)setConnection({text:stage+' · '+(e.message||String(e)),failed:true});
+    }finally{
+      if(link && !ready){
         await link.close();
         if(owner.current===link)owner.current=null;
-        throw e;
       }
-    });
+      if(generationAtOpen===generation.current){lock.current=false;setBusy(false);}
+    }
   }
   function changeMode(next){
     if(busy || mode===next)return;
-    setMode(next);setFrame(null);setError(false);setMsg(board?'已连接':'等待连接');
+    setMode(next);setFrame(null);message('');
   }
   async function acquire(continuous){
     if(lock.current||!board)return;
@@ -117,7 +130,8 @@ export default function OpenScope(){
   }
   return <main className="openscope">
     <header className="os-header"><div><a href="/" className="back">ZooLark View</a><h1>OpenScope <span>RP2350B</span></h1></div>
-      <div className="connection"><span className={board?'online':''}>{board?'R149 已连接':'未连接'}</span><button className="primary" disabled={!board&&busy} onClick={board?disconnect:connect}>{board?'断开 USB':'连接 USB 仪器'}</button></div></header>
+      <div className="connection"><span className={board?'online':''}>{board?identity.release+' 已连接':busy?'连接中…':'未连接'}</span><button className="primary" disabled={!board&&busy} onClick={board?disconnect:connect}>{board?'断开 USB':'连接 USB 仪器'}</button></div></header>
+    {connection.text&&<div aria-live="polite" className={'notice mono '+(connection.failed?'error':'')}>{connection.text}</div>}
     <div className="bench"><aside><h2>仪器</h2><nav aria-label="实板功能">{Object.entries(modes).map(([id,name])=><button key={id} aria-pressed={mode===id} disabled={busy} onClick={()=>changeMode(id)}>{name}</button>)}</nav></aside>
     <section className="work" aria-label={modes[mode]}>
     {plot?<><div className="title"><h2>{modes[mode]}</h2><small>{mode==='LA'?'J1 · 15–18':mode==='A34'?'J1 · 5 / 7':'J1 · 1 / 3'}</small></div>
@@ -142,8 +156,8 @@ export default function OpenScope(){
     :mode==='battery'?<><h2>电池监测</h2><p className="muted">读取 GPIO47 / ADC7 的板端分压采样与电量档位。</p><button className="primary" disabled={!board||busy} onClick={()=>run(async()=>setBattery(await board.battery()))}>读取电池</button>
       {battery&&<div className="readback"><h3>板端电池读数</h3><b>{battery.mv/1000} V · {battery.level} / 4 格</b><p>{battery.cal}</p></div>}</>
     :<Outputs key={mode+String(!!board)} kind={mode} board={board} run={run} busy={busy}/>}
-    <div role="status" className={'notice '+(error?'error':'')}>{msg}</div></section></div>
-    <details className="pins"><summary>接线与设备身份</summary><p>使用 USB 数据线连接 J3，关闭占用串口的桌面上位机。R149 的逻辑分析与输出设置由当前固件读回。</p>
+    {msg&&<div role="status" className={'notice '+(error?'error':'')}>{msg}</div>}</section></div>
+    <details className="pins"><summary>接线与设备身份</summary><p>使用 USB 数据线连接 J3，关闭占用串口的桌面上位机。支持 HW2.1 R144 和 R149 固件。</p>
       <table><thead><tr><th>J1 引脚</th><th>信号</th><th>硬件路径</th><th>J1 地线</th></tr></thead><tbody>{pinout.map(r=><tr key={r[0]}>{r.map(v=><td key={v}>{v}</td>)}</tr>)}</tbody></table>
       {identity&&<p className="mono">{identity.id}<br/>{identity.build}</p>}</details>
   </main>;

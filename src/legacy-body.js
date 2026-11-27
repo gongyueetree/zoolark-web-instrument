@@ -24,7 +24,7 @@ export const legacyBodyHtml = String.raw`
                                 <line x1="14" y1="10" x2="14" y2="14" stroke-width="2"/>
                                 <line x1="18" y1="10" x2="18" y2="14" stroke-width="2"/>
                             </svg>
-                            OpenScope / R149
+                            OpenScope / R144 · R149
                         </button>
                         <button class="connection-type-btn" data-type="usb">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -45,7 +45,7 @@ export const legacyBodyHtml = String.raw`
 
                 <!-- 串口配置 -->
                 <div id="serial-config" class="config-panel">
-                    <p>OpenScope RP2350B 使用 R149 固件的 USB CDC 串口。连接后可读取仪器身份、采集波形和设置输出。</p>
+                    <p>OpenScope RP2350B 使用 HW2.1 R144 或 R149 固件的 USB CDC 串口。连接后可读取仪器身份、采集波形和设置输出。</p>
                 </div>
 
                 <!-- USB配置 -->
