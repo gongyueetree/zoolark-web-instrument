@@ -289,20 +289,6 @@ function initializeSerialModal() {
         });
     });
 
-    // 扫描串口
-    document.getElementById('scan-ports')?.addEventListener('click', async () => {
-        if ('serial' in navigator) {
-            try {
-                const port = await navigator.serial.requestPort();
-                alert('已选择串口设备');
-            } catch (err) {
-                console.log('用户取消了串口选择');
-            }
-        } else {
-            alert('您的浏览器不支持 Web Serial API\\n请使用 Chrome/Edge 浏览器');
-        }
-    });
-
     // 扫描USB设备
     document.getElementById('scan-usb')?.addEventListener('click', async () => {
         if ('usb' in navigator) {
@@ -340,20 +326,15 @@ function initializeSerialModal() {
 
     // 连接设备
     connectDeviceBtn.addEventListener('click', () => {
-        // 保存完整的UART配置
-        AppState.serialConfig.port = document.getElementById('serial-port')?.value || '';
-        AppState.serialConfig.baudRate = parseInt(document.getElementById('baud-rate')?.value || 115200);
-        AppState.serialConfig.dataBits = parseInt(document.getElementById('data-bits')?.value || 8);
-        AppState.serialConfig.stopBits = parseFloat(document.getElementById('stop-bits')?.value || 1);
-        AppState.serialConfig.parity = document.getElementById('parity')?.value || 'none';
-        AppState.serialConfig.flowControl = document.getElementById('flow-control')?.value || 'none';
+        if (AppState.serialConfig.type === 'serial') {
+            window.location.assign('/openscope');
+            return;
+        }
 
         // 关闭弹窗并连接
         modal.classList.add('hidden');
         toggleConnection();
 
-        // 在控制台显示配置信息
-        console.log('UART配置已保存:', AppState.serialConfig);
     });
 }
 
