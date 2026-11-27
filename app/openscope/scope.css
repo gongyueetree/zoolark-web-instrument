@@ -1,6 +1,6 @@
 #board-header,#board-screen,#board-controls,#board-scale,#board-footer{display:none}
 body.board-live .control-panel{display:flex!important;min-width:0;flex-shrink:0}
-.board-live .control-panel>:not(#board-controls),.board-live .display-area>:not(.display-header):not(#board-screen),.board-live .header-actions>:not(#board-header),.board-live .display-info>:not(#board-scale),.board-live .status-bar>:not(#board-footer),.board-live #wfl-device-summary,.board-live #ai-panel,.board-live .nav-btn[data-instrument="custom-dashboard"],.board-live .nav-btn[data-instrument="jtag-fpga"],.board-live .nav-btn[data-instrument="kxtj3"]{display:none!important}
+.board-live .control-panel>:not(#board-controls),.board-live .display-area>:not(.display-header):not(#board-screen),.board-live .header-actions>:not(#board-header),.board-live .display-info>:not(#board-scale),.board-live .status-bar>:not(#board-footer),.board-live #wfl-device-summary,.board-live #ai-panel,.board-live .nav-btn[data-instrument="jtag-fpga"],.board-live .nav-btn[data-instrument="kxtj3"]{display:none!important}
 .board-live .display-area{display:flex!important;min-width:0}
 .board-live .display-area>.display-header{order:-1}
 .board-live .display-info{display:flex!important}
@@ -32,3 +32,17 @@ body.board-live .control-panel{display:flex!important;min-width:0;flex-shrink:0}
 .board-live .board-card{margin:clamp(16px,3vw,48px);padding:24px;background:var(--bg-panel);border:1px solid var(--border-color);border-radius:10px}.board-card h2,.board-card h3{margin-bottom:12px}
 .board-live .fft-container{display:block}.board-live .fft-container>label{justify-content:space-between}.board-live .fft-container .plot-wrap{height:18vh}
 @media(max-width:800px){.board-live .header{flex-wrap:wrap;gap:8px;padding:8px 12px}.board-live .nav-menu{order:3;flex-basis:100%}.board-live .header-actions{margin-left:auto}.board-live .main-content{flex-direction:column;overflow:auto}.board-live .control-panel{width:100%;max-height:40vh}.board-live .display-area{min-height:45vh}.board-live .display-header{flex-wrap:wrap;gap:5px}.board-live .status-bar{padding:4px 8px}}
+.board-ui .quantity{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:6px}.quantity input{width:100%}
+.output-preview{margin:clamp(12px,2vw,30px);border:1px solid var(--border-color);border-radius:8px;background:var(--bg-darker);padding:12px}
+.preview-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.preview-head span{color:var(--text-secondary);font:12px ui-monospace,monospace}
+.preview-head button,.live-dashboard button,.live-dashboard select{background:var(--bg-control);color:var(--text-primary);border:1px solid var(--border-color);border-radius:5px;padding:5px 9px;cursor:pointer}
+.preview-head button{margin-left:auto}.output-preview svg{display:block;width:100%;height:auto;max-height:55vh}
+.output-preview line{stroke:#233348}.output-preview text{fill:#a8b8d0;font:12px ui-monospace,monospace}.output-preview path{stroke:#00d4ff;stroke-width:1.8;fill:none}
+.board-ui .view-scales{padding:6px 0}.view-scales summary{font-size:14px;cursor:pointer;margin-bottom:8px}.view-scales .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.live-dashboard{padding:14px;overflow:auto;min-height:0}.dashbar,.panel-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.dashbar{margin-bottom:12px}
+.live-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}.live-grid article{min-width:0;padding:12px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-panel)}
+.live-grid article.wide{grid-column:1/-1}.live-grid article>header{display:flex;gap:6px;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:grab}.live-grid .plot-wrap{height:220px}
+.dash-output h2,.dash-output .muted{display:none}.live-grid .readback,.live-grid .output-preview{margin:8px 0;padding:10px}.dash-output .form-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}.live-grid select{max-width:100%}
+@media(max-width:800px){.live-grid{grid-template-columns:minmax(0,1fr)}.board-live:has(.live-dashboard) .display-area{min-height:65vh}}
+
+@media(min-width:801px){.board-live .nav-menu{flex-wrap:wrap;row-gap:2px}}

@@ -183,3 +183,28 @@ test('averaged traces are interpolated at the same trigger phase across captures
   assert.equal(averageWindows(b,make(0),2).count,1);
   assert.equal(averageWindows(a,make(0,2),2).count,1);
 });
+test('continuous RAW2 uses one START for multiple frames and waits for STOP before the next query',async()=>{
+  const c=new AbortController(),seen=[];
+  const {link,log}=serial(cmd=>{
+    if(cmd==='RAW2:START')return ['OK RAW2 STARTED\n',zp(),zp(),zp()];
+    if(cmd==='RAW2:STOP')return ['OK RAW2 STOPPED\n'];
+    if(cmd==='RAW2:DECIM 1')return ['OK RAW2:DECIM=1\n'];
+    return line(identity(cmd));
+  });
+  await link.open();const board=new Instrument(link);
+  try{
+    await board.identify();
+    await board.captureScope(6,4,undefined,c.signal,'board',f=>{
+      seen.push(f);if(seen.length===2)c.abort();
+    });
+    await board.state();
+    assert.equal(seen.length,2);assert.equal(seen[0].rate,100000);
+    assert.deepEqual(log.slice(-4),['RAW2:DECIM 1','RAW2:START','RAW2:STOP','LINK:STATE?']);
+  }finally{await link.close();}
+});
+test('decoder retains fragmented binary payloads after the receive buffer is reused',()=>{
+  const decoder=new WireDecoder(),received=[];
+  const one=zp(),two=zp();two[8]=7;
+  for(const b of [...one,...two])decoder.feed(Uint8Array.of(b),e=>received.push(e));
+  assert.deepEqual(received,[one,two]);assert.equal(decoder.tail.length,0);
+});

@@ -53,10 +53,16 @@ export function rawFrame(bytes) {
 }
 
 export class WireDecoder {
-  constructor() { this.tail = new Uint8Array(); }
+  constructor() { this.buffer=new Uint8Array(8192);this.used=0; }
+  get tail(){return this.buffer.subarray(0,this.used);}
   feed(chunk, emit) {
-    const data = new Uint8Array(this.tail.length + chunk.length);
-    data.set(this.tail); data.set(chunk, this.tail.length);
+    const size=this.used+chunk.length;
+    if(size>this.buffer.length){
+      const grown=new Uint8Array(Math.max(size,this.buffer.length*2));
+      grown.set(this.tail);this.buffer=grown;
+    }
+    this.buffer.set(chunk,this.used);
+    const data=this.buffer.subarray(0,size);
     let pos = 0;
     while (pos < data.length) {
       const left = data.length - pos;
@@ -66,7 +72,7 @@ export class WireDecoder {
         requireWire(data[pos+4] === 1 && data[pos+5] === 64, '损坏的 ZP23 帧头');
         const size = 64 + 2 * (data[pos+30] + 256 * data[pos+31]);
         if (left < size) break;
-        emit(data.subarray(pos,pos+size)); pos += size;
+        emit(data.slice(pos,pos+size)); pos += size;
       } else if (data[pos]===90 && data[pos+1]===67 && data[pos+2]===48 && data[pos+3]===49) {
         if (left<32) break;
         const size = data[pos+6] + 256*data[pos+7];
@@ -82,7 +88,8 @@ export class WireDecoder {
         pos = end+1;
       }
     }
-    this.tail = data.slice(pos);
+    this.used=data.length-pos;
+    if(pos && this.used)this.buffer.copyWithin(0,pos,size);
   }
 }
 

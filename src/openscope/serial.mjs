@@ -35,22 +35,31 @@ export class SerialLink {
     this.onLost?.(error);
     void this.close();
   }
-  exchange(command, accept, timeout=3500) {
+  exchange(command, accept, timeout=3500, signal) {
+    if(signal?.aborted)return Promise.resolve(null);
     if (this.closed || !this.writer) return Promise.reject(new Error('仪器未连接'));
     if (this.pending) return Promise.reject(new Error('串口正在处理上一请求'));
     return new Promise((resolve,reject) => {
+      let timer;
+      const cancel=()=>finish(null,null);
+      const touch=()=>{
+        clearTimeout(timer);
+        timer=setTimeout(()=>this.fail(new Error(command+' 超时，请重新连接')),timeout);
+      };
       const finish = (error,value) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort',cancel);
         this.pending = null;
         if (error) reject(error); else resolve(value);
       };
-      const timer = setTimeout(() => this.fail(new Error(command+' 超时，请重新连接')),timeout);
+      touch();
+      signal?.addEventListener('abort',cancel,{once:true});
       this.pending = {finish,receive:event => {
         try {
           if (typeof event === 'string' && (/^ERR|\|ERROR=|^SD\|STATUS=BUSY|^(?:LA|A34)\|STATUS=(?!OK)/.test(event))) {
             throw new DeviceRefusal(event);
           }
-          const result = accept(event);
+          const result = accept(event,touch);
           if (result !== undefined) finish(null,result);
         } catch (e) {
           if (e instanceof DeviceRefusal) finish(e); else this.fail(e);

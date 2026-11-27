@@ -1,5 +1,5 @@
 'use client';
-import {useState,useRef,useEffect} from 'react';
+import {useState,useRef,useEffect,useCallback} from 'react';
 import {createPortal} from 'react-dom';
 import {Instrument,USB} from '../../src/openscope/instrument.mjs';
 import {SerialLink} from '../../src/openscope/serial.mjs';
@@ -7,9 +7,11 @@ import {TIME_US,VDIV_MV} from '../../src/openscope/frames.mjs';
 import {scopeTrigger,averageWindows,stats} from '../../src/openscope/display.mjs';
 import Plot,{timeLabel,format} from './Plot';
 import Outputs from './Outputs';
+import Quantity from './Quantity';
+import Dashboard from './Dashboard';
 import './scope.css';
 
-const modes={A12:'示波器 A1/A2',A34:'示波器 A3/A4',FFT:'频谱',LA:'逻辑分析',FRA:'频响',wav:'WAV',pwm:'PWM',dc:'DC',battery:'电池'};
+const modes={dashboard:'自定义仪表板',A12:'示波器 A1/A2',A34:'示波器 A3/A4',FFT:'频谱',LA:'逻辑分析',FRA:'频响',wav:'WAV',pwm:'PWM',dc:'DC',battery:'电池'};
 const traces=['A12','A34','FFT','LA'];
 const pinout=[
   ['1 / 3','A1 / A2','MAX1193 · 8 位双通道','2 / 4'],
@@ -17,11 +19,11 @@ const pinout=[
   ['9 / 11 / 13','PWM / WAV / DC','三路独立输出','10 / 12 / 14'],
   ['15 / 16 / 17 / 18','D0 / D1 / D2 / D3','GPIO18 / 17 / 20 / 19','20'],
 ];
-const navigation={'oscilloscope':'A12','spectrum-analyzer':'FFT','logic-analyzer':'LA','network-analyzer':'FRA','waveform-generator':'wav','pwm-generator':'pwm','power-supply':'dc','battery-monitor':'battery'};
+const navigation={'custom-dashboard':'dashboard','oscilloscope':'A12','spectrum-analyzer':'FFT','logic-analyzer':'LA','network-analyzer':'FRA','waveform-generator':'wav','pwm-generator':'pwm','power-supply':'dc','battery-monitor':'battery'};
 export default function Bench({initialLive}){
   const [live,setLive]=useState(initialLive),[slots,setSlots]=useState(null);
   const [visible,setVisible]=useState([true,true]),[sideFFT,setSideFFT]=useState(false);
-  const nextMode=useRef(null);
+  const nextMode=useRef(null),dashboardCancel=useRef(null);
   function selectLive(value){
     setLive(value);
     try{sessionStorage.setItem('zoolark-live-view',value?'1':'0');}catch{}
@@ -49,6 +51,29 @@ export default function Bench({initialLive}){
   const [connection,setConnection]=useState({text:'',failed:false});
   const [busy,setBusy]=useState(false),[acquiring,setAcquiring]=useState(false),[mode,setMode]=useState('A12');
   const [td,setTd]=useState(6),[vd,setVd]=useState(4),[rate,setRate]=useState(50000),[laRate,setLaRate]=useState(1000000);
+  const [viewScales,setViewScales]=useState([0,0]),[zoom,setZoom]=useState(1);
+  const [auxScales,setAuxScales]=useState([0,0]),[auxZoom,setAuxZoom]=useState(1);
+  const auxMode=mode==='A34';
+  const displayScales=auxMode?auxScales:viewScales,displayZoom=auxMode?auxZoom:zoom;
+  const setDisplayScales=auxMode?setAuxScales:setViewScales,setDisplayZoom=auxMode?setAuxZoom:setZoom;
+  const [fps,setFps]=useState(null);
+  const cadence=useRef(null);
+  const countPaint=useCallback(()=>{
+    const meter=cadence.current;
+    if(!meter)return;
+    meter.frames++;
+    const now=performance.now();
+    if(now-meter.since>=1000){
+      setFps(Math.round(meter.frames*1000/(now-meter.since)));
+      cadence.current={frames:0,since:now};
+    }
+  },[]);
+  const scaleRequest=useRef({td,vd}),segment=useRef(null);
+  function requestScale(nextTd,nextVd){
+    scaleRequest.current={td:nextTd,vd:nextVd};
+    setTd(nextTd);setVd(nextVd);setFrame(null);setTriggerStatus('');
+    segment.current?.abort();
+  }
   const [trigger,setTrigger]=useState({source:'board',edge:'rise',level:'0',average:1});
   const [triggerStatus,setTriggerStatus]=useState('');
   const triggerRef=useRef(trigger);
@@ -75,9 +100,11 @@ export default function Bench({initialLive}){
     if(lock.current)return;
     const gen=generation.current;
     lock.current=true;setBusy(true);message('正在与仪器通信…');
-    try{await job();if(gen===generation.current)message('操作完成');}
+    try{await job();if(gen===generation.current)message('操作完成');return gen===generation.current;}
     catch(e){if(gen===generation.current)message(e.message||String(e),true);}
-    finally{if(gen===generation.current){lock.current=false;setBusy(false);}}
+    finally{if(gen===generation.current){lock.current=false;setBusy(false);
+      if(!active.current && nextMode.current){setMode(nextMode.current);nextMode.current=null;setFrame(null);message('');}
+    }}
   }
   async function connect(){
     if(lock.current)return;
@@ -109,7 +136,7 @@ export default function Bench({initialLive}){
       const info=await device.identify(report);
       if(generationAtOpen!==generation.current)return;
       ready=true;
-      setIdentity(info);setBoard(device);setTd(+info.state.TDIV);setVd(+info.state.VDIV);
+      setIdentity(info);setBoard(device);requestScale(+info.state.TDIV,+info.state.VDIV);
       setConnection({text:'',failed:false});
     }catch(e){
       if(generationAtOpen===generation.current)setConnection({text:stage+' · '+(e.message||String(e)),failed:true});
@@ -124,7 +151,7 @@ export default function Bench({initialLive}){
   function changeMode(next){
     if(mode===next)return;
     if(active.current){nextMode.current=next;active.current.abort();return;}
-    if(lock.current)return;
+    if(lock.current){if(mode==='dashboard'){nextMode.current=next;dashboardCancel.current?.();}return;}
     setMode(next);setFrame(null);setTriggerStatus('');message('');
   }
   function changeTrigger(key,value){
@@ -136,29 +163,17 @@ export default function Bench({initialLive}){
     const gen=generation.current, abort=new AbortController();
     active.current=abort;setAcquiring(true);setFrame(null);setTriggerStatus('');
     await run(async()=>{
-      if(primary){
-        const state=await board.scopeSettings(td,vd);
-        if(gen===generation.current)setIdentity(old=>old && ({...old,state}));
-      }
-      let lastPercent=-1,previousChannel,previousSettings,average;
-      do{
-        if(abort.signal.aborted)break;
+      let previousChannel,previousSettings,average;
+      cadence.current={frames:0,since:performance.now()};
+      setFps(null);
+      function publish(f,config){
+        if(abort.signal.aborted || gen!==generation.current || (primary&&scaleRequest.current!==config))return false;
         const settings=triggerRef.current;
         if(settings!==previousSettings){previousChannel=undefined;average=null;previousSettings=settings;}
-        if(mode==='A12' && ['1','2'].includes(settings.source) && !settings.level.trim()){
-          setTriggerStatus('请填写触发电平');await new Promise(r=>setTimeout(r,100));continue;
-        }
-        message(primary && TIME_US[td]>5000?'连续采集中…':'正在采集…');
-        const f=primary?await board.captureScope(td,vd,fraction=>{
-          const n=Math.floor(fraction*100);if(n!==lastPercent && gen===generation.current){lastPercent=n;message('连续采集 '+n+'%');}
-        },abort.signal,mode==='A12'?settings.source:'free'):await board.captureGroup(mode,mode==='LA'?laRate:rate);
-        if(!f || abort.signal.aborted || gen!==generation.current)break;
-        if(mode==='A12' && settings!==triggerRef.current)continue;
-        f.span=primary?4*TIME_US[td]/1e6:f.channels[0].length/f.rate;
-        let show=true;
+        f.span=primary?4*TIME_US[config.td]/1e6:f.channels[0].length/f.rate;
         if(mode==='A12'){
-          const follow=settings.source==='board';
-          const modeLabel=follow?'板端 '+['AUTO','A1','A2'][f.boardSource]:'手动 A'+settings.source;
+          const follow=settings.source==='board',modeLabel=follow?'板端 '+['AUTO','A1','A2'][f.boardSource]:'手动 A'+settings.source;
+          if(follow&&f.boardSource==null)return false;
           f.trigger=scopeTrigger(f,settings,f.span,previousChannel);
           if(f.trigger){
             previousChannel=f.trigger.source;f.start=f.trigger.start;
@@ -167,21 +182,48 @@ export default function Bench({initialLive}){
               average=averageWindows(average,f,settings.average);
               status+=' · 平均 '+average.count+'/'+settings.average;
               f.channels=average.channels;f.start=0;f.skew=[0,0];
-              show=continuous||average.count===settings.average;
-            }
-            setTriggerStatus(status);
+              setTriggerStatus(status);
+              if(!continuous&&average.count<settings.average)return false;
+            }else setTriggerStatus(status);
           }else if(settings.source==='free')setTriggerStatus('自由运行');
           else{
-            average=null;show=follow && continuous;
-            setTriggerStatus(modeLabel+(show?' · 未触发，自由刷新':' · 等待触发'));
+            average=null;
+            const free=follow&&continuous;
+            setTriggerStatus(modeLabel+(free?' · 未触发，自由刷新':' · 等待触发'));
+            if(!free)return false;
           }
         }
-        if(show){setFrame(f);if(!continuous)break;}
-        await new Promise(r=>setTimeout(r,100));
-      }while(!abort.signal.aborted);
+        setFrame(f);
+        return true;
+      }
+      let applied;
+      do{
+        const config=scaleRequest.current;
+        const batch=new AbortController();segment.current=batch;
+        const cancel=()=>batch.abort();
+        abort.signal.addEventListener('abort',cancel,{once:true});
+        try{
+          if(primary && applied!==config){
+            const state=await board.scopeSettings(config.td,config.vd);
+            if(gen!==generation.current || batch.signal.aborted)continue;
+            setIdentity(old=>old&&({...old,state}));applied=config;average=null;previousChannel=undefined;
+          }
+          if(batch.signal.aborted)continue;
+          message('正在采集…');
+          const source=mode==='A12'?triggerRef.current.source:'free';
+          const streaming=primary && continuous && TIME_US[config.td]<=5000;
+          const result=primary?await board.captureScope(config.td,config.vd,fraction=>{
+            if(!batch.signal.aborted)message('连续采集 '+Math.floor(fraction*100)+'%');
+          },batch.signal,source,streaming?f=>publish(f,config):undefined)
+            :await board.captureGroup(mode,mode==='LA'?laRate:rate);
+          if(result && !batch.signal.aborted && publish(result,config) && !continuous)break;
+        }finally{
+          abort.signal.removeEventListener('abort',cancel);if(segment.current===batch)segment.current=null;
+        }
+      }while(!abort.signal.aborted && gen===generation.current);
     });
     if(gen===generation.current){
-      active.current=null;setAcquiring(false);
+      cadence.current=null;active.current=null;setAcquiring(false);
       if(nextMode.current){setMode(nextMode.current);nextMode.current=null;setFrame(null);setTriggerStatus('');message('');}
     }
   }
@@ -195,13 +237,15 @@ export default function Bench({initialLive}){
     const peaks=frame.channels.filter((_,i)=>visible[i]).map(ch=>{const {min,max}=stats(ch);return Math.max(Math.abs(min),Math.abs(max));});
     if(!peaks.length)return;
     const range=[0,1,2,7,3,4,5,6].find(i=>VDIV_MV[i]>=Math.max(...peaks)*1000/3.5)??6;
+    requestScale(td,range);
+    if(active.current)return;
     await run(async()=>{
       const actual=await board.scopeSettings(td,range);
       setVd(+actual.VDIV);setIdentity(prev=>({...prev,state:actual}));setFrame(null);setTriggerStatus('');
     });
   }
   async function readScope(){
-    await run(async()=>{const s=await board.state();setTd(+s.TDIV);setVd(+s.VDIV);setIdentity(prev=>({...prev,state:s}));setFrame(null);});
+    await run(async()=>{const s=await board.state();requestScale(+s.TDIV,+s.VDIV);setIdentity(prev=>({...prev,state:s}));setFrame(null);});
   }
   function select(title,value,set,options){
     return <label>{title}<select value={value} onChange={e=>{set(Number(e.target.value));setFrame(null);}}>{options.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>;
@@ -249,29 +293,34 @@ export default function Bench({initialLive}){
   const scopeControls=<>
       {(mode==='A12'||mode==='A34')&&<label>输入通道组<select value={mode} onChange={e=>changeMode(e.target.value)}><option value="A12">A1 / A2 · MAX1193</option><option value="A34">A3 / A4 · ADC</option></select></label>}
       {mode!=='LA'&&<div className="channel-controls">{visible.map((v,i)=><label key={i} style={{color:i?'#00d4ff':'#ffc107'}}><input type="checkbox" checked={v} onChange={()=>setVisible(visible.map((x,j)=>j===i?!x:x))}/> CH{i+1+(mode==='A34'?2:0)}</label>)}</div>}
-      <fieldset disabled={!board||busy}><div className="form-grid">
-        {primary?<>{select('板端时基 / 格',td,setTd,TIME_US.map((t,i)=>[i,timeLabel(t/1e6)]))}
-          {select('板端量程 / 格',vd,setVd,[0,1,2,7,3,4,5,6].map(i=>[i,VDIV_MV[i]+' mV'+(i===7?'（500 mV 档放大）':'')]))}</>:select('请求采样率 / 通道',mode==='LA'?laRate:rate,mode==='LA'?setLaRate:setRate,(mode==='LA'?[100000,250000,1000000]:[10000,50000,100000,250000]).map(v=>[v,v/1000+' kS/s']))}
+      <fieldset disabled={!board||(busy&&!(primary&&acquiring))}><div className="form-grid">
+        {primary?<>{select('板端时基 / 格',td,v=>requestScale(v,vd),TIME_US.map((t,i)=>[i,timeLabel(t/1e6)]))}
+          {select('板端量程 / 格',vd,v=>requestScale(td,v),[0,1,2,7,3,4,5,6].map(i=>[i,VDIV_MV[i]+' mV'+(i===7?'（500 mV 档放大）':'')]))}</>:select('请求采样率 / 通道',mode==='LA'?laRate:rate,mode==='LA'?setLaRate:setRate,(mode==='LA'?[100000,250000,1000000]:[10000,50000,100000,250000]).map(v=>[v,v/1000+' kS/s']))}
       </div></fieldset>
+      {(mode==='A12'||auxMode)&&<details className="view-scales" open><summary>显示刻度</summary><div className="form-grid">
+        {displayScales.map((v,i)=><label key={i}>CH{i+(auxMode?3:1)} 显示 / 格<select value={v} onChange={e=>setDisplayScales(old=>old.map((n,j)=>j===i?Number(e.target.value):n))}>
+          <option value={0}>{auxMode?'满量程（0–3.3 V）':'随板端量程'}</option>{[10,20,50,100,200,500,1000,2000,5000].map(n=><option key={n} value={n}>{n<1000?n+' mV':n/1000+' V'}</option>)}</select></label>)}
+        <label>水平放大<select value={displayZoom} onChange={e=>setDisplayZoom(Number(e.target.value))}>{[1,2,5,10].map(n=><option key={n} value={n}>{n}×</option>)}</select></label>
+      </div></details>}
       {mode==='A12'&&<fieldset disabled={!board||(busy&&!acquiring)}><div className="form-grid">
         <label>软件触发源<select value={trigger.source} onChange={e=>changeTrigger('source',e.target.value)}>
           <option value="board">跟随板端触发源（自动电平）</option><option value="1">A1</option><option value="2">A2</option><option value="free">自由运行</option>
         </select></label>
         {trigger.source!=='free'&&<label>边沿<select value={trigger.edge} onChange={e=>changeTrigger('edge',e.target.value)}><option value="rise">上升沿</option><option value="fall">下降沿</option></select></label>}
-        {['1','2'].includes(trigger.source)&&<label>电平 / V<input type="number" step="any" value={trigger.level} onChange={e=>changeTrigger('level',e.target.value)}/></label>}
+        {['1','2'].includes(trigger.source)&&<Quantity title="电平" value={trigger.level} onChange={v=>changeTrigger('level',String(v))}/>}
         {trigger.source!=='free'&&<label>平均次数<select value={trigger.average} onChange={e=>changeTrigger('average',Number(e.target.value))}>{[1,2,4,8,16,32].map(n=><option key={n} value={n}>{n===1?'关闭':n+' 次'}</option>)}</select></label>}
       </div></fieldset>}
       <div className="row">{acquiring?<button onClick={()=>active.current?.abort()}>停止采集</button>:<>
         <button className="primary" disabled={!board||busy} onClick={()=>acquire(true)}>运行</button>
         <button disabled={!board||busy} onClick={()=>acquire(false)}>单次</button></>}
-        {primary&&<><button disabled={!board||busy||!frame||!visible.some(Boolean)} onClick={autoScale}>自动缩放</button><button disabled={!board||busy} onClick={updateScope}>写入时基与量程</button><button disabled={!board||busy} onClick={readScope}>读取板端参数</button></>}
+        {primary&&<><button disabled={!board||(busy&&!acquiring)||!frame||!visible.some(Boolean)} onClick={autoScale}>自动缩放</button><button disabled={!board||busy} onClick={updateScope}>写入时基与量程</button><button disabled={!board||busy} onClick={readScope}>读取板端参数</button></>}
       </div></>;
   const scopeScreen=<>
-    <Plot frame={frame} fft={mode==='FFT'} visible={visible} emptyText={board?(acquiring?'正在等待实板采集…':'点击左侧「运行」或「单次」开始采集'):'连接 USB 仪器后可采集波形'} measureHost={slots.controls.querySelector('.board-metrics')}/>
+    <Plot frame={frame} onPaint={countPaint} fft={mode==='FFT'} viewScales={mode==='A12'||auxMode?displayScales:undefined} zoom={mode==='A12'||auxMode?displayZoom:1} visible={visible} emptyText={board?(acquiring?'正在等待实板采集…':'点击左侧「运行」或「单次」开始采集'):'连接 USB 仪器后可采集波形'} measureHost={slots.controls.querySelector('.board-metrics')}/>
     {mode==='A12'&&<div className="fft-container"><label>FFT 频谱分析 <input type="checkbox" checked={sideFFT} onChange={e=>setSideFFT(e.target.checked)}/></label>{sideFFT&&<Plot frame={frame} fft visible={visible} hideMetrics/>}</div>}
   </>;
-  const otherControls=mode==='FRA'?<><p>外部正弦源接被测电路输入，A1 测参考，A2 测响应。</p>
-    <fieldset disabled={!board||busy}><label>外部源频率 / Hz<input type="number" min="1000" max="20000" value={freq} onChange={e=>setFreq(e.target.value)}/></label>
+  const otherControls=mode==='dashboard'?<p>在同一屏添加仪器。示波器和频谱共用一帧采样。</p>:mode==='FRA'?<><p>外部正弦源接被测电路输入，A1 测参考，A2 测响应。</p>
+    <fieldset disabled={!board||busy}><Quantity title="外部源频率" type="frequency" min={1000} max={20000} value={freq} onChange={setFreq}/>
     <button className="primary" onClick={()=>run(async()=>{const point=await board.fra(Number(freq));setFra(old=>[...old.filter(p=>p.request!==Number(freq)),{...point,request:Number(freq)}].sort((a,b)=>a.request-b.request));})}>采集频点</button></fieldset></>
     :mode==='battery'?<button className="primary" disabled={!board||busy} onClick={()=>run(async()=>setBattery(await board.battery()))}>读取电池</button>
     :<Outputs key={mode+String(!!board)} kind={mode} board={board} run={run} busy={busy} displayHost={slots.screen}/>;
@@ -285,10 +334,10 @@ export default function Bench({initialLive}){
       {msg&&<div role="status" className={'notice '+(error?'error':'')}>{msg}</div>}
       </div>{plot&&<div className="panel-section"><h3 className="panel-title">测量</h3><div className="board-metrics"/></div>}
       <details className="panel-section board-ui"><summary>接线与设备身份</summary><table><thead><tr><th>J1</th><th>信号</th><th>地</th></tr></thead><tbody>{pinout.map(([pin,name,,ground])=><tr key={pin}><td>{pin}</td><td>{name}</td><td>{ground}</td></tr>)}</tbody></table><small>{identity?.id} {identity?.build}</small></details></>)}
-    {portal('scale',<>{plot&&primary?<><span className="channel-indicator ch1">CH1 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span className="channel-indicator ch2">CH2 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span>时基 {timeLabel((identity?.state.TDIV_US||TIME_US[td])/1e6)}/div</span></>:<b>{modes[mode]}</b>}
+    {portal('scale',<>{plot&&primary?<><span className="channel-indicator ch1">CH1 · {(mode==='A12'&&viewScales[0])||identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span className="channel-indicator ch2">CH2 · {(mode==='A12'&&viewScales[1])||identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span>时基 {timeLabel((identity?.state.TDIV_US||TIME_US[td])/1e6/(mode==='A12'?zoom:1))}/div</span></>:<b>{modes[mode]}</b>}
       {mode==='A12'&&<span>{triggerStatus}</span>}</>)}
-    {portal('screen',<>{plot?scopeScreen:mode==='FRA'?<div className="board-card"><h2>频响测量</h2>{fra.length? <table><thead><tr><th>设定</th><th>实测频率</th><th>A2/A1 增益</th></tr></thead><tbody>{fra.map(p=><tr key={p.request}><td>{p.request} Hz</td><td>{format(p.hz)} Hz</td><td>{format(p.gain)} dB</td></tr>)}</tbody></table>:<p>等待采集频点</p>}</div>
+    {portal('screen',<>{plot?scopeScreen:mode==='dashboard'?<Dashboard key={String(!!board)} board={board} run={run} td={td} vd={vd} trigger={trigger} cancelRef={dashboardCancel}/>:mode==='FRA'?<div className="board-card"><h2>频响测量</h2>{fra.length? <table><thead><tr><th>设定</th><th>实测频率</th><th>A2/A1 增益</th></tr></thead><tbody>{fra.map(p=><tr key={p.request}><td>{p.request} Hz</td><td>{format(p.hz)} Hz</td><td>{format(p.gain)} dB</td></tr>)}</tbody></table>:<p>等待采集频点</p>}</div>
       :mode==='battery'?<div className="board-card"><h2>电池监测</h2><p>{battery?battery.mv/1000+' V · '+battery.level+' / 4 格':'等待读取电池'}</p></div>:null}</>)}
-    {portal('footer',<><b>OpenScope RP2350B</b><span>{identity?.build||'HW2.1 R144 / R149'}</span><span>USB CDC</span>{frame&&<span>{format(frame.rate)} S/s</span>}<span>{frame?.quality}</span></>)}
+    {portal('footer',<><b>OpenScope RP2350B</b><span>{identity?.build||'HW2.1 R144 / R149'}</span><span>USB CDC</span>{frame&&<span>{format(frame.rate)} S/s</span>}<span>{frame?.quality}</span>{plot&&acquiring&&fps!==null&&<span>显示 {fps} 帧/s</span>}</>)}
   </>;
 }

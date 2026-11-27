@@ -82,7 +82,7 @@ export class Instrument {
     await this.calibrationFor(vd);
     return actual;
   }
-  async captureScope(td,vd,progress,signal,source='free') {
+  async captureScope(td,vd,progress,signal,source='free',onRawFrame) {
     const us=TIME_US[td], mv=VDIV_MV[vd], rolling=us>5000;
     const triggered=source!=='free';
     let boardSource;
@@ -99,13 +99,19 @@ export class Instrument {
       if (!rolling) await this.query('RAW2:DECIM 1','OK RAW2:DECIM=1');
       const collect=rolling ? rollWindow(us,mv,progress,triggered) : rawFrame;
       const command=rolling ? 'CS:START 10000' : 'RAW2:START';
-      for(let i=0; ; i++) {
+      for(let i=0; !signal?.aborted; i++) {
         try {
-          frame=await this.link.exchange(command,event=>{
+          frame=await this.link.exchange(command,(event,touch)=>{
             if (typeof event==='string') {
               if (rolling ? event.startsWith('CS|START|') : event==='OK RAW2 STARTED') started=true;
-            } else if (started && event[1]===(rolling ? 67 : 80)) return signal?.aborted ? null : collect(event);
-          },Math.max(6000,us*(rolling&&triggered?6:4)/1000+5000));
+            } else if (started && event[1]===(rolling ? 67 : 80)) {
+              const next=collect(event);
+              if(!rolling && onRawFrame){
+                touch();
+                onRawFrame(this.scaleScopeFrame(next,td,vd));
+              }else return next;
+            }
+          },Math.max(6000,us*(rolling&&triggered?6:4)/1000+5000),signal);
           break;
         } catch(e) {
           if (!(e instanceof DeviceRefusal) || !e.message.includes('CAPTURE_BUSY_RETRY') || i>=12) throw e;
@@ -113,12 +119,17 @@ export class Instrument {
         }
       }
     } finally {
-      if (started && !this.link.closed) await this.query(rolling?'CS:STOP':'RAW2:STOP',rolling?'CS|STOP|':'OK RAW2 STOPPED');
+      // An abort may precede the START acknowledgement. Queue STOP behind START
+      // and wait for its own acknowledgement before handing the port back.
+      if ((started || signal?.aborted) && !this.link.closed) await this.query(rolling?'CS:STOP':'RAW2:STOP',rolling?'CS|STOP|':'OK RAW2 STOPPED');
     }
     if (!frame) return null;
-    requireWire(frame.tdiv===us && frame.vdiv===mv,'量程或时基已在板端改变，请刷新参数');
-    const cal=this.calibration[vd===7?3:vd];
     if(rolling)frame.boardSource=boardSource;
+    return this.scaleScopeFrame(frame,td,vd);
+  }
+  scaleScopeFrame(frame,td,vd){
+    requireWire(frame.tdiv===TIME_US[td] && frame.vdiv===VDIV_MV[vd],'量程或时基已在板端改变，请刷新参数');
+    const cal=this.calibration[vd===7?3:vd];
     frame.voltsPerCode=cal.gain;
     frame.channels=frame.channels.map((ch,i)=>Float32Array.from(ch,code=>(cal.zero[i]-code)*cal.gain));
     frame.quality=cal.boot?'本机开机校零 · 标称增益':'标称零点与增益';
