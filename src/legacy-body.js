@@ -172,7 +172,8 @@ export const legacyBodyHtml = String.raw`
                 </button>
             </nav>
             <div class="header-actions">
-                <a class="connect-btn" href="/openscope">OpenScope 实板</a>
+                <button class="connect-btn" id="openscope-connect" type="button">OpenScope 实板</button>
+                <div id="board-header"></div>
                 <button class="icon-btn" id="ai-assistant-btn" title="AI助手">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <circle cx="12" cy="12" r="10" stroke-width="2"/>
@@ -196,6 +197,7 @@ export const legacyBodyHtml = String.raw`
         <main class="main-content">
             <!-- 左侧控制面板 -->
             <aside class="control-panel">
+                <div id="board-controls"></div>
                 <div class="panel-section">
                     <h3 class="panel-title">控制</h3>
 
@@ -632,8 +634,9 @@ export const legacyBodyHtml = String.raw`
 
             <!-- 中间显示区域 -->
             <section class="display-area">
+                <div id="board-screen"></div>
                 <div class="display-header">
-                    <div class="display-info">
+                    <div class="display-info"><div id="board-scale"></div>
                         <span class="channel-indicator ch1">CH1: 5.00V/div</span>
                         <span class="channel-indicator ch2">CH2: 2.00V/div</span>
                         <span class="time-indicator">时基: 1ms/div</span>
@@ -947,7 +950,7 @@ export const legacyBodyHtml = String.raw`
         </main>
 
         <!-- 状态栏 -->
-        <footer class="status-bar">
+        <footer class="status-bar"><div id="board-footer"></div>
             <div class="status-item">
                 <span class="status-label">采样率:</span>
                 <span class="status-value">45.00 MS/s</span>

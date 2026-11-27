@@ -327,7 +327,7 @@ function initializeSerialModal() {
     // 连接设备
     connectDeviceBtn.addEventListener('click', () => {
         if (AppState.serialConfig.type === 'serial') {
-            window.location.assign('/openscope');
+            window.dispatchEvent(new Event('openscope-connect'));
             return;
         }
 
@@ -2197,6 +2197,7 @@ function drawTriggerLine(ctx, width, height) {
 
 // 数据生成
 function generateWaveformData() {
+    if (document.body.classList.contains('board-live')) return;
     const samples = 1000;
     const frequency = AppState.waveformGenerator.frequency;  // 已经是Hz
     const amplitude = AppState.waveformGenerator.amplitude;  // 峰值电压

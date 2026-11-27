@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { WireDecoder,crc32,rawFrame,rollWindow,snapshot } from '../src/openscope/frames.mjs';
 import { Instrument,BUILD } from '../src/openscope/instrument.mjs';
 import { SerialLink } from '../src/openscope/serial.mjs';
-import { triggerStart,spectrum } from '../src/openscope/display.mjs';
+import { scopeTrigger,averageWindows,spectrum } from '../src/openscope/display.mjs';
 
 const encode=s=>new TextEncoder().encode(s);
 function serial(reply){
@@ -106,10 +106,34 @@ test('DC write is acknowledged, read back, and mismatch is surfaced',async()=>{
   const s=await board.output('dc','apply',{mv:-1250});assert.equal(s.mv,-1250);assert.equal(s.feedback,null);
   assert.equal(log.at(-1),'DC:STATUS?');await assert.rejects(board.output('dc','on'),/状态不符/);await link.close();
 });
-test('both traces share the trigger window and known sine has expected FFT amplitude',()=>{
-  const frame={channels:[[-1,-1,-1,1,1],[-1,1,-1,1,-1]],rate:1000,skew:[0,0]};
-  assert.equal(triggerStart(frame,1,'rise',0,.004),.0015);
-  assert.equal(triggerStart(frame,1,'rise',4,.004),null);
+test('RAW2 follows the board channel and locks a 10 kHz sine despite changing capture phase',()=>{
+  const span=.0004,rate=3410000;
+  for(const source of [0,1,2]){
+    const raw=zp();raw[52]=source;assert.equal(rawFrame(raw).boardSource,source);
+    for(const phase of [0,.4,1.9,4.6]){
+      const signal=Float32Array.from({length:4096},(_,i)=>.2+1.94*Math.sin(2*Math.PI*10000*i/rate+phase));
+      const noise=signal.map((_,i)=>.04*((i%3)-1));
+      const f={channels:source===2?[noise,signal]:[signal,noise],boardSource:source,skew:[0,.5/rate],rate,voltsPerCode:.04};
+      for(const edge of ['rise','fall']){
+        const lock=scopeTrigger(f,{source:'board',edge,level:'0'},span);
+        assert.equal(lock.source,source===2?2:1);assert.ok(Math.abs(lock.level-.2)<.02);
+        const angle=2*Math.PI*10000*(lock.start+span/4-f.skew[lock.source-1])+phase;
+        assert.ok(Math.abs(Math.sin(angle))<.011);assert.equal(Math.cos(angle)>0,edge==='rise');
+        assert.ok(lock.start>=Math.max(...f.skew) && lock.start+span<4096/rate);
+      }
+    }
+  }
+});
+test('manual trigger rejects a partial window and preserves the common start and A2 aperture',()=>{
+  const f={channels:[[-1,-1,-1,1,1,1,1,1],[-1,-1,1,1,1,1,1,1]],rate:1000,skew:[0,.0005],voltsPerCode:.04};
+  const manual={source:'1',edge:'rise',level:'0'};
+  assert.equal(scopeTrigger(f,manual,.004).start,.0015);
+  assert.equal(scopeTrigger(f,{...manual,source:'2'},.004).start,.001);
+  assert.equal(scopeTrigger(f,manual,.007),null);
+  assert.equal(scopeTrigger(f,{...manual,level:'5'},.004),null);
+  assert.equal(scopeTrigger(f,{source:'free'},.004),null);
+});
+test('known sine has expected FFT amplitude',()=>{
   const sine=Array.from({length:1024},(_,i)=>2*Math.sin(2*Math.PI*50*i/1024));
   const s=spectrum(sine,1024);assert.equal(s.step,1);assert.ok(Math.abs(s.bins[50]-2)<.001);
 });
@@ -129,4 +153,33 @@ test('ZC01 fragmented epochs, gaps, CRC, common window length',()=>{
   assert.equal(frame.channels[1].length,400);
   const invalid=rollWindow(10000,1000);invalid(metadata);assert.throws(()=>invalid(zc(1,new Uint8Array(1024),1)),/缺口/);
   block[98]^=5;assert.throws(()=>invalid(block),/校验/);
+});
+
+test('slow timebase reads board source before CS and leaves overcapture for a full aligned window',async()=>{
+  const body=new Uint8Array(20),v=new DataView(body.buffer);
+  for(const [i,n] of [[0,10000],[4,1000000],[12,500000],[16,10000]])v.setUint32(i,n,true);
+  const data=new Uint8Array(800);
+  for(let i=0;i<data.length;i+=2){data[i]=128;data[i+1]=128+Math.round(45*Math.sin(i*Math.PI/80));}
+  const {link,log}=serial(cmd=>{
+    if(cmd==='STATUS')return line('MODE:OSC; USB:OK; TRIG:A2; STREAM:OFF; SEQ:0; RAW2:OFF; RAW2_SEQ:0; FW:DAY28_PAIRED_RAW_STREAM');
+    if(cmd==='CS:START 10000')return ['CS|START|RATE=10000\r\n',zc(2,body),zc(1,data),zc(1,data,400)];
+    if(cmd==='CS:STOP')return line('CS|STOP|OK=1');
+    return line(identity(cmd));
+  });
+  await link.open();const board=new Instrument(link);
+  try{
+    await board.identify();const f=await board.captureScope(12,4,undefined,undefined,'board');
+    assert.equal(f.channels[0].length,602);assert.equal(f.boardSource,2);
+    assert.equal(scopeTrigger(f,{source:'board',edge:'rise'},.04).source,2);
+    assert.deepEqual(log.slice(-3),['STATUS','CS:START 10000','CS:STOP']);
+  }finally{await link.close();}
+});
+test('averaged traces are interpolated at the same trigger phase across captures',()=>{
+  const make=(shift,source=1)=>({rate:1000,span:.004,start:.002+shift/1000,skew:[0,.0005],
+    trigger:{source},channels:[0,.5].map(skew=>Float32Array.from({length:12},(_,i)=>i+skew-shift))});
+  const a=averageWindows(null,make(0),2),b=averageWindows(a,make(.5),2);
+  assert.equal(b.count,2);assert.deepEqual([...b.channels[0]],[2,3,4,5,6]);
+  assert.deepEqual([...b.channels[0]],[...b.channels[1]]);
+  assert.equal(averageWindows(b,make(0),2).count,1);
+  assert.equal(averageWindows(a,make(0,2),2).count,1);
 });

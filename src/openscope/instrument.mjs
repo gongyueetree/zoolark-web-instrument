@@ -82,13 +82,22 @@ export class Instrument {
     await this.calibrationFor(vd);
     return actual;
   }
-  async captureScope(td,vd,progress,signal) {
+  async captureScope(td,vd,progress,signal,source='free') {
     const us=TIME_US[td], mv=VDIV_MV[vd], rolling=us>5000;
+    const triggered=source!=='free';
+    let boardSource;
+    if(rolling && source==='board'){
+      // ZC01 omits the source that RAW2 embeds. Read it before opening the stream.
+      const status=await this.query('STATUS','MODE:OSC;');
+      const match=status.match(/;\s*TRIG:(A1|A2|AUTO);/);
+      requireWire(match,'板端未返回有效触发源');
+      boardSource={AUTO:0,A1:1,A2:2}[match[1]];
+    }
     let started=false;
     let frame;
     try {
       if (!rolling) await this.query('RAW2:DECIM 1','OK RAW2:DECIM=1');
-      const collect=rolling ? rollWindow(us,mv,progress) : rawFrame;
+      const collect=rolling ? rollWindow(us,mv,progress,triggered) : rawFrame;
       const command=rolling ? 'CS:START 10000' : 'RAW2:START';
       for(let i=0; ; i++) {
         try {
@@ -96,7 +105,7 @@ export class Instrument {
             if (typeof event==='string') {
               if (rolling ? event.startsWith('CS|START|') : event==='OK RAW2 STARTED') started=true;
             } else if (started && event[1]===(rolling ? 67 : 80)) return signal?.aborted ? null : collect(event);
-          },Math.max(6000,us*4/1000+5000));
+          },Math.max(6000,us*(rolling&&triggered?6:4)/1000+5000));
           break;
         } catch(e) {
           if (!(e instanceof DeviceRefusal) || !e.message.includes('CAPTURE_BUSY_RETRY') || i>=12) throw e;
@@ -109,6 +118,8 @@ export class Instrument {
     if (!frame) return null;
     requireWire(frame.tdiv===us && frame.vdiv===mv,'量程或时基已在板端改变，请刷新参数');
     const cal=this.calibration[vd===7?3:vd];
+    if(rolling)frame.boardSource=boardSource;
+    frame.voltsPerCode=cal.gain;
     frame.channels=frame.channels.map((ch,i)=>Float32Array.from(ch,code=>(cal.zero[i]-code)*cal.gain));
     frame.quality=cal.boot?'本机开机校零 · 标称增益':'标称零点与增益';
     return frame;

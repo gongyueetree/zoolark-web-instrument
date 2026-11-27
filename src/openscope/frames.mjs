@@ -48,7 +48,7 @@ export function rawFrame(bytes) {
   requireWire(channels.every((ch,i) => ch.length && ch.length === u16(32 + 2*i)), 'ZP23 通道标记与计数不符');
   requireWire(u32(44) === u32(48) && VDIV_MV.includes(u32(44) / 1000) && TIME_US.includes(u32(40)), 'ZP23 量程或时基未知');
   const first = (u16(64) >>> 9);
-  return {group:'A12', seq:u32(8), rate:effective / 2, rawRate, channels, skew:[first / rawRate, (1-first) / rawRate],
+  return {group:'A12', boardSource:integer(bytes[52],0,2), seq:u32(8), rate:effective / 2, rawRate, channels, skew:[first / rawRate, (1-first) / rawRate],
     tdiv:u32(40), vdiv:u32(44) / 1000};
 }
 
@@ -132,8 +132,8 @@ export function snapshot(lines, group) {
   return {group, seq:integer(h.SEQ,0,0xffffffff), rate, channels, skew:aux ? [0,0.5/rate] : [0,0,0,0]};
 }
 
-// Collect one four-division window in a single clock epoch. Never interpolate across gaps.
-export function rollWindow(tdiv, vdiv, notify) {
+// Triggered views need extra samples around the display window within the same epoch.
+export function rollWindow(tdiv, vdiv, notify, triggered=false) {
   let epoch, expected = 0, frame, seen = 0;
   return bytes => {
     const v = new DataView(bytes.buffer,bytes.byteOffset,bytes.length);
@@ -145,8 +145,9 @@ export function rollWindow(tdiv, vdiv, notify) {
       const rate=v.getUint32(32,true), raw=v.getUint32(44,true);
       requireWire(epoch===undefined && index===0 && v.getBigUint64(20,true)>0n && bytes[43]===0 && bytes[42]<=1 && rate>0 && rate<=500000 && raw>=rate && raw%rate===0, '连续采集时钟或起点无效');
       requireWire(v.getUint32(36,true)===vdiv*1000 && v.getUint32(48,true)===tdiv, '采集中板端量程或时基改变');
-      const n=Math.ceil(4*tdiv*rate/1e6);
-      requireWire(n>0 && n<=1000000, '连续采集窗口超长');
+      const displaySamples=Math.ceil(4*tdiv*rate/1e6);
+      requireWire(displaySamples>0 && displaySamples<=1000000, '连续采集窗口超长');
+      const n=triggered?Math.ceil(displaySamples*1.5)+2:displaySamples;
       epoch=id;
       frame={group:'A12',seq:id,rate,tdiv,vdiv,skew:[0,0],channels:[new Uint8Array(n),new Uint8Array(n)]};
       return;

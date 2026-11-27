@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {createPortal} from 'react-dom';
 const names={wav:'波形输出',pwm:'PWM 输出',dc:'直流输出'};
 const waves=['三角波','方波','正弦波','锯齿波'];
 const defaults={wav:{wave:2,hz:1000,amp:1,offset:0,peak:50},pwm:{hz:1000,duty:50},dc:{mv:0}};
@@ -18,7 +19,7 @@ function wireValues(draft){
   }
   return result;
 }
-export default function Outputs({kind,board,run,busy}){
+export default function Outputs({kind,board,run,busy,displayHost}){
   const [draft,setDraft]=useState(defaults[kind]),[actual,setActual]=useState(null);
   const [time,setTime]=useState('');
   function publish(s,copy=false){setActual(s);setTime(new Date().toLocaleTimeString());if(copy)setDraft(formValues(kind,s));}
@@ -57,9 +58,9 @@ export default function Outputs({kind,board,run,busy}){
         {kind==='dc'&&number('mv','目标电压 / V',-4,4,.001)}
       </div><button className="primary" disabled={!actual}>写入参数并核对</button>
     </form><div className="row"><button onClick={()=>command('read')}>读取板端设置</button><button disabled={!actual || !!actual.on} onClick={()=>command('on')}>开启板端输出</button><button onClick={()=>command('off')}>关闭板端输出</button></div></fieldset>
-    <div className="readback"><h3>板端回读 {time && <small>{time}</small>}</h3>{!actual?'尚无有效读回':<><strong>{actual.on?'输出已开启':'输出已关闭'}{actual.fault?' · 故障 '+actual.fault:''}</strong><p>
+    {createPortal(<div className="board-card readback"><h2>{names[kind]}</h2><h3>板端回读 {time && <small>{time}</small>}</h3>{!actual?'尚无有效读回':<><strong>{actual.on?'输出已开启':'输出已关闭'}{actual.fault?' · 故障 '+actual.fault:''}</strong><p>
       {kind==='wav'&&[waves[actual.wave],actual.hz+' Hz',actual.amp/10+' Vpp','偏置 '+actual.offset/10+' V',...(actual.wave===3?['峰位 '+actual.peak+' %']:[])].join(' · ')}
       {kind==='pwm'&&actual.hz+' Hz · 占空比 '+actual.duty+' %'}
       {kind==='dc'&&'设定 '+actual.mv/1000+' V · 反馈 '+(actual.feedback===null?'暂无有效值':actual.feedback/1000+' V')+' · '+actual.state}
-    </p></>}</div></>;
+    </p></>}</div>,displayHost)}</>;
 }
