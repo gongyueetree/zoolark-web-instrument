@@ -52,11 +52,8 @@ export default function Bench({initialLive}){
   const [connection,setConnection]=useState({text:'',failed:false});
   const [busy,setBusy]=useState(false),[acquiring,setAcquiring]=useState(false),[mode,setMode]=useState('A12');
   const [td,setTd]=useState(6),[vd,setVd]=useState(4),[rate,setRate]=useState(50000),[laRate,setLaRate]=useState(1000000);
-  const [viewScales,setViewScales]=useState([0,0]),[zoom,setZoom]=useState(1);
   const [auxScales,setAuxScales]=useState([0,0]),[auxZoom,setAuxZoom]=useState(1);
   const auxMode=mode==='A34';
-  const displayScales=auxMode?auxScales:viewScales,displayZoom=auxMode?auxZoom:zoom;
-  const setDisplayScales=auxMode?setAuxScales:setViewScales,setDisplayZoom=auxMode?setAuxZoom:setZoom;
   const [fps,setFps]=useState(null);
   const cadence=useRef(null);
   const countPaint=useCallback(()=>{
@@ -297,15 +294,17 @@ export default function Bench({initialLive}){
       <fieldset disabled={!board||(busy&&!(primary&&acquiring))}><div className="form-grid">
         {primary?<BoardScales td={td} vd={vd} onChange={requestScale}/>:select('请求采样率 / 通道',mode==='LA'?laRate:rate,mode==='LA'?setLaRate:setRate,(mode==='LA'?[100000,250000,1000000]:[10000,50000,100000,250000]).map(v=>[v,v/1000+' kS/s']))}
       </div></fieldset>
-      {(mode==='A12'||auxMode)&&<details className="view-scales" open><summary>显示刻度</summary><div className="form-grid">
-        <DisplayScales aux={auxMode} scales={displayScales} zoom={displayZoom} onScales={setDisplayScales} onZoom={setDisplayZoom}/>
-      </div></details>}
+      {auxMode&&<div className="form-grid aux-scales">
+        <DisplayScales aux scales={auxScales} zoom={auxZoom} onScales={setAuxScales} onZoom={setAuxZoom}/>
+      </div>}
       {mode==='A12'&&<fieldset disabled={!board||(busy&&!acquiring)}><div className="form-grid">
-        <label>软件触发源<select value={trigger.source} onChange={e=>changeTrigger('source',e.target.value)}>
-          <option value="board">跟随板端触发源（自动电平）</option><option value="1">A1</option><option value="2">A2</option><option value="free">自由运行</option>
-        </select></label>
-        {trigger.source!=='free'&&<label>边沿<select value={trigger.edge} onChange={e=>changeTrigger('edge',e.target.value)}><option value="rise">上升沿</option><option value="fall">下降沿</option></select></label>}
-        {['1','2'].includes(trigger.source)&&<Quantity title="电平" value={trigger.level} onChange={v=>changeTrigger('level',String(v))}/>}
+        <div className="trigger-row">
+          <label>触发源<select aria-label="软件触发源" value={trigger.source} onChange={e=>changeTrigger('source',e.target.value)}>
+            <option value="board" title="跟随板端触发源，自动计算电平">跟随板端</option><option value="1">A1</option><option value="2">A2</option><option value="free">自由运行</option>
+          </select></label>
+          {trigger.source!=='free'&&<label>边沿<select value={trigger.edge} onChange={e=>changeTrigger('edge',e.target.value)}><option value="rise">上升沿</option><option value="fall">下降沿</option></select></label>}
+          {['1','2'].includes(trigger.source)&&<Quantity title="电平" value={trigger.level} onChange={v=>changeTrigger('level',String(v))}/>}
+        </div>
         {trigger.source!=='free'&&<label>平均次数<select value={trigger.average} onChange={e=>changeTrigger('average',Number(e.target.value))}>{[1,2,4,8,16,32].map(n=><option key={n} value={n}>{n===1?'关闭':n+' 次'}</option>)}</select></label>}
       </div></fieldset>}
       <div className="row">{acquiring?<button onClick={()=>active.current?.abort()}>停止采集</button>:<>
@@ -314,7 +313,7 @@ export default function Bench({initialLive}){
         {primary&&<><button disabled={!board||(busy&&!acquiring)||!frame||!visible.some(Boolean)} onClick={autoScale}>自动缩放</button><button disabled={!board||busy} onClick={updateScope}>写入时基与量程</button><button disabled={!board||busy} onClick={readScope}>读取板端参数</button></>}
       </div></>;
   const scopeScreen=<>
-    <Plot frame={frame} onPaint={countPaint} fft={mode==='FFT'} viewScales={mode==='A12'||auxMode?displayScales:undefined} zoom={mode==='A12'||auxMode?displayZoom:1} visible={visible} emptyText={board?(acquiring?'正在等待实板采集…':'点击左侧「运行」或「单次」开始采集'):'连接 USB 仪器后可采集波形'} measureHost={slots.controls.querySelector('.board-metrics')}/>
+    <Plot frame={frame} onPaint={countPaint} fft={mode==='FFT'} viewScales={auxMode?auxScales:undefined} zoom={auxMode?auxZoom:1} visible={visible} emptyText={board?(acquiring?'正在等待实板采集…':'点击左侧「运行」或「单次」开始采集'):'连接 USB 仪器后可采集波形'} measureHost={slots.controls.querySelector('.board-metrics')}/>
     {mode==='A12'&&<div className="fft-container"><label>FFT 频谱分析 <input type="checkbox" checked={sideFFT} onChange={e=>setSideFFT(e.target.checked)}/></label>{sideFFT&&<Plot frame={frame} fft visible={visible} hideMetrics/>}</div>}
   </>;
   const otherControls=mode==='dashboard'?<p>在同一屏添加仪器。示波器和频谱共用一帧采样。</p>:mode==='FRA'?<><p>外部正弦源接被测电路输入，A1 测参考，A2 测响应。</p>
@@ -332,7 +331,7 @@ export default function Bench({initialLive}){
       {msg&&<div role="status" className={'notice '+(error?'error':'')}>{msg}</div>}
       </div>{plot&&<div className="panel-section"><h3 className="panel-title">测量</h3><div className="board-metrics"/></div>}
       <details className="panel-section board-ui"><summary>接线与设备身份</summary><table><thead><tr><th>J1</th><th>信号</th><th>地</th></tr></thead><tbody>{pinout.map(([pin,name,,ground])=><tr key={pin}><td>{pin}</td><td>{name}</td><td>{ground}</td></tr>)}</tbody></table><small>{identity?.id} {identity?.build}</small></details></>)}
-    {portal('scale',<>{plot&&primary?<><span className="channel-indicator ch1">CH1 · {(mode==='A12'&&viewScales[0])||identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span className="channel-indicator ch2">CH2 · {(mode==='A12'&&viewScales[1])||identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span>时基 {timeLabel((identity?.state.TDIV_US||TIME_US[td])/1e6/(mode==='A12'?zoom:1))}/div</span></>:<b>{modes[mode]}</b>}
+    {portal('scale',<>{plot&&primary?<><span className="channel-indicator ch1">CH1 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span className="channel-indicator ch2">CH2 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span>时基 {timeLabel((identity?.state.TDIV_US||TIME_US[td])/1e6)}/div</span></>:<b>{modes[mode]}</b>}
       {mode==='A12'&&<span>{triggerStatus}</span>}</>)}
     {portal('screen',<>{plot?scopeScreen:mode==='dashboard'?<Dashboard key={String(!!board)} board={board} run={run} td={td} vd={vd} trigger={trigger} onBoardScale={requestScale} onVerified={state=>setIdentity(old=>old&&({...old,state}))} cancelRef={dashboardCancel}/>:mode==='FRA'?<div className="board-card"><h2>频响测量</h2>{fra.length? <table><thead><tr><th>设定</th><th>实测频率</th><th>A2/A1 增益</th></tr></thead><tbody>{fra.map(p=><tr key={p.request}><td>{p.request} Hz</td><td>{format(p.hz)} Hz</td><td>{format(p.gain)} dB</td></tr>)}</tbody></table>:<p>等待采集频点</p>}</div>
       :mode==='battery'?<div className="board-card"><h2>电池监测</h2><p>{battery?battery.mv/1000+' V · '+battery.level+' / 4 格':'等待读取电池'}</p></div>:null}</>)}

@@ -38,7 +38,17 @@ body.board-live .control-panel{display:flex!important;min-width:0;flex-shrink:0}
 .preview-head button,.live-dashboard button,.live-dashboard select{background:var(--bg-control);color:var(--text-primary);border:1px solid var(--border-color);border-radius:5px;padding:5px 9px;cursor:pointer}
 .preview-head button{margin-left:auto}.output-preview svg{display:block;width:100%;height:auto;max-height:55vh}
 .output-preview line{stroke:#233348}.output-preview text{fill:#a8b8d0;font:12px ui-monospace,monospace}.output-preview path{stroke:#00d4ff;stroke-width:1.8;fill:none}
-.board-ui .view-scales{padding:6px 0}.view-scales summary{font-size:14px;cursor:pointer;margin-bottom:8px}.view-scales .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.board-ui .aux-scales{grid-template-columns:repeat(2,minmax(0,1fr))}
+.board-ui .trigger-row{display:flex;align-items:flex-end;gap:6px}
+.trigger-row>label{flex:1 1 0;min-width:0}
+.trigger-row>label:nth-child(2){flex-grow:1.15}
+.board-ui .trigger-row .quantity{flex:1.65 1 0;min-width:0;gap:3px;grid-template-columns:minmax(0,1fr) auto}
+.board-ui .trigger-row select,.board-ui .trigger-row input[type=number]{min-width:0;width:100%;height:34px;padding:4px;font-size:13px}
+@media(max-width:768px){
+  .board-live .control-panel:has(.trigger-row){position:static;transform:none;height:auto;z-index:auto}
+}
+.trigger-row input[type=number]{appearance:textfield}
+.trigger-row input::-webkit-inner-spin-button,.trigger-row input::-webkit-outer-spin-button{-webkit-appearance:none}
 .live-dashboard{container-type:inline-size;padding:14px;overflow:auto;min-height:0}.dashbar,.panel-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.dashbar{margin-bottom:12px}
 .live-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;align-items:stretch}.live-grid article{grid-column:span var(--panel-span,3);min-width:0;padding:12px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-panel)}
 .live-grid article>header{display:flex;gap:6px;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:grab}.live-grid .plot-wrap{height:220px}
