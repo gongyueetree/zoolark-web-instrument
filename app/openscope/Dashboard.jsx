@@ -41,7 +41,7 @@ function loadLayout(){
 export default function Dashboard({board,run,td,vd,trigger,onBoardScale,onVerified,cancelRef}){
   const [panels,setPanels]=useState(loadLayout),[add,setAdd]=useState('A12');
   const [captureMode,setCaptureMode]=useState('idle'),[frames,setFrames]=useState({}),[battery,setBattery]=useState(null);
-  const running=captureMode==='continuous',working=captureMode==='once';
+  const capturing=captureMode!=='idle';
   const widths=panelWidths(panels);
   const queue=useRef(Promise.resolve()),alive=useRef(true),controller=useRef(null);
   const configured=useRef(''),dragged=useRef(null),nextId=useRef(Math.max(0,...panels.map(p=>p.id))+1);
@@ -112,6 +112,18 @@ export default function Dashboard({board,run,td,vd,trigger,onBoardScale,onVerifi
     return ()=>{c.abort();if(controller.current===c)controller.current=null;};
   },[captureMode,td,vd,board,hasInput,enqueue,sample]);
 
+  function acquisitionButtons(inScope){
+    const available=Boolean(board)&&hasInput;
+    return <>
+      <button type="button" className={inScope?'scope-run':undefined} disabled={!available}
+        onClick={()=>{if(capturing)controller.current?.abort();setCaptureMode(capturing?'idle':'continuous');}}>
+        {inScope?(capturing?'停止采集':'开始采集'):(capturing?'停止刷新':'连续刷新')}
+      </button>
+      <button type="button" disabled={!available||capturing} onClick={()=>setCaptureMode('once')}>
+        {inScope?'单次采集':'单次刷新'}
+      </button>
+    </>;
+  }
   function changeBoardScale(nextTd,nextVd){
     controller.current?.abort();
     setFrames(old=>({...old,A12:null,FFT:null}));
@@ -128,14 +140,15 @@ export default function Dashboard({board,run,td,vd,trigger,onBoardScale,onVerifi
   return <section className="live-dashboard">
     <div className="dashbar"><label>添加仪器 <select value={add} onChange={e=>setAdd(e.target.value)}>{Object.entries(names).map(([k,n])=><option key={k} value={k}>{n}</option>)}</select></label>
       <button disabled={['wav','pwm','dc','battery'].includes(add)&&panels.some(p=>p.kind===add)} onClick={()=>setPanels(old=>[...old,{id:nextId.current++,kind:add,wide:false,channel:'both'}])}>添加面板</button>
-      <button disabled={!board||working||(!running&&!hasInput)} onClick={()=>setCaptureMode(running?'idle':'continuous')}>{running?'停止刷新':'连续刷新'}</button>
-      <button disabled={!board||!hasInput||working||running} onClick={()=>setCaptureMode('once')}>单次刷新</button>
+      {acquisitionButtons(false)}
     </div>
     {!panels.length&&<p>请选择仪器并添加面板。</p>}
     <div className="live-grid">{panels.map((p,index)=><article key={p.id} className={isScope(p.kind)?'scope-card':''} style={{'--panel-span':widths[index]}} aria-label={names[p.kind]+'面板'}
       onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();reorder(dragged.current,p.id);dragged.current=null;}}>
       <header draggable onDragStart={e=>{dragged.current=p.id;e.dataTransfer.setData('text/plain',String(p.id));}}>
-        <strong>{names[p.kind]}</strong><div className="panel-tools">
+        <strong>{names[p.kind]}</strong>
+        {isScope(p.kind)&&<div className="scope-actions" role="group" aria-label="示波器采集">{acquisitionButtons(true)}</div>}
+        <div className="panel-tools">
           <button title="前移" disabled={!index} onClick={()=>reorder(p.id,panels[index-1].id)}>←</button>
           <button title="后移" disabled={index===panels.length-1} onClick={()=>reorder(p.id,panels[index+1].id)}>→</button>
           <button onClick={()=>update(p.id,{wide:!p.wide})}>{p.wide?'并排':'全宽'}</button>
@@ -153,7 +166,7 @@ export default function Dashboard({board,run,td,vd,trigger,onBoardScale,onVerifi
               onScales={scales=>update(p.id,{scales})} onZoom={zoom=>update(p.id,{zoom})}/>}
           </div>}
           <Plot frame={frames[p.kind]} fft={p.kind==='FFT'} hideMetrics visible={[p.channel!=='2',p.channel!=='1']}
-            viewScales={isScope(p.kind)?p.scales||defaultScales:undefined} zoom={isScope(p.kind)?p.zoom||1:1} emptyText="等待刷新"/>
+            viewScales={isScope(p.kind)?p.scales||defaultScales:undefined} zoom={isScope(p.kind)?p.zoom||1:1} emptyText={!board?'请先连接 USB 仪器':capturing?'正在等待采集数据…':isScope(p.kind)?'点击「开始采集」查看波形':'点击「连续刷新」采集数据'}/>
         </>}
     </article>)}</div>
   </section>;
