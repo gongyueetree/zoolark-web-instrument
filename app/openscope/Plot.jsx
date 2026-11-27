@@ -19,10 +19,12 @@ export default function Plot({frame,fft,visible,measureHost,hideMetrics=false,em
       const pixelsW=Math.round(w*dpr),pixelsH=Math.round(h*dpr);
       if(canvas.width!==pixelsW)canvas.width=pixelsW;if(canvas.height!==pixelsH)canvas.height=pixelsH;
       const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
-      const left=54,right=w-15,top=16,bottom=h-32,pw=right-left,ph=bottom-top;
       const digital=frame?.group==='LA', aux=frame?.group==='A34';
       const reference=visible?.[0]===false?1:0;
       const scale=ch=>viewScales?.[ch]||frame?.vdiv||(aux?3300/8:1000);
+      const voltageAxis=!!frame&&!fft&&!digital;
+      const twoAxes=voltageAxis&&visible?.[0]!==false&&visible?.[1]!==false&&scale(0)!==scale(1);
+      const left=54,right=w-(twoAxes?54:15),top=16,bottom=h-32,pw=right-left,ph=bottom-top;
       let ymax=(aux?8:4)*scale(reference)/1000,ymin=aux?0:-ymax;
       if(fft){ymin=0;ymax=Math.max(.001,...(specs||[]).map(s=>s?stats(s.bins).max:0))*1.05;}
       const fullSpan=frame?.span||1;
@@ -34,7 +36,15 @@ export default function Plot({frame,fft,visible,measureHost,hideMetrics=false,em
       for(let i=0;i<=8;i++){
         const y=top+ph*i/8;ctx.strokeStyle=i===4?'#49546b':'#193049';
         ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();
-        if(frame && !digital && !(i%2)){ctx.fillStyle='#abbdc0';ctx.textAlign='right';if(viewScales&&!fft)ctx.fillStyle=colors[reference];ctx.fillText(format(ymax-(ymax-ymin)*i/8),left-7,y+4);}
+        if(frame && !digital && !(i%2)){
+          ctx.fillStyle=voltageAxis&&viewScales?colors[reference]:'#abbdc0';
+          ctx.textAlign='right';
+          ctx.fillText(format(ymax-(ymax-ymin)*i/8)+(voltageAxis?' V':''),left-7,y+4);
+          if(twoAxes){
+            ctx.fillStyle=colors[1];ctx.textAlign='left';
+            ctx.fillText(format(((aux?8:4)-i)*scale(1)/1000)+' V',right+6,y+4);
+          }
+        }
       }
       for(let i=0;i<=4;i++){
         const x=left+pw*i/4;ctx.strokeStyle='#193049';ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,bottom);ctx.stroke();

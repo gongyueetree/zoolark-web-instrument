@@ -9,6 +9,7 @@ import Plot,{timeLabel,format} from './Plot';
 import Outputs from './Outputs';
 import Quantity from './Quantity';
 import Dashboard from './Dashboard';
+import {BoardScales,DisplayScales} from './ScopeScales';
 import './scope.css';
 
 const modes={dashboard:'自定义仪表板',A12:'示波器 A1/A2',A34:'示波器 A3/A4',FFT:'频谱',LA:'逻辑分析',FRA:'频响',wav:'WAV',pwm:'PWM',dc:'DC',battery:'电池'};
@@ -294,13 +295,10 @@ export default function Bench({initialLive}){
       {(mode==='A12'||mode==='A34')&&<label>输入通道组<select value={mode} onChange={e=>changeMode(e.target.value)}><option value="A12">A1 / A2 · MAX1193</option><option value="A34">A3 / A4 · ADC</option></select></label>}
       {mode!=='LA'&&<div className="channel-controls">{visible.map((v,i)=><label key={i} style={{color:i?'#00d4ff':'#ffc107'}}><input type="checkbox" checked={v} onChange={()=>setVisible(visible.map((x,j)=>j===i?!x:x))}/> CH{i+1+(mode==='A34'?2:0)}</label>)}</div>}
       <fieldset disabled={!board||(busy&&!(primary&&acquiring))}><div className="form-grid">
-        {primary?<>{select('板端时基 / 格',td,v=>requestScale(v,vd),TIME_US.map((t,i)=>[i,timeLabel(t/1e6)]))}
-          {select('板端量程 / 格',vd,v=>requestScale(td,v),[0,1,2,7,3,4,5,6].map(i=>[i,VDIV_MV[i]+' mV'+(i===7?'（500 mV 档放大）':'')]))}</>:select('请求采样率 / 通道',mode==='LA'?laRate:rate,mode==='LA'?setLaRate:setRate,(mode==='LA'?[100000,250000,1000000]:[10000,50000,100000,250000]).map(v=>[v,v/1000+' kS/s']))}
+        {primary?<BoardScales td={td} vd={vd} onChange={requestScale}/>:select('请求采样率 / 通道',mode==='LA'?laRate:rate,mode==='LA'?setLaRate:setRate,(mode==='LA'?[100000,250000,1000000]:[10000,50000,100000,250000]).map(v=>[v,v/1000+' kS/s']))}
       </div></fieldset>
       {(mode==='A12'||auxMode)&&<details className="view-scales" open><summary>显示刻度</summary><div className="form-grid">
-        {displayScales.map((v,i)=><label key={i}>CH{i+(auxMode?3:1)} 显示 / 格<select value={v} onChange={e=>setDisplayScales(old=>old.map((n,j)=>j===i?Number(e.target.value):n))}>
-          <option value={0}>{auxMode?'满量程（0–3.3 V）':'随板端量程'}</option>{[10,20,50,100,200,500,1000,2000,5000].map(n=><option key={n} value={n}>{n<1000?n+' mV':n/1000+' V'}</option>)}</select></label>)}
-        <label>水平放大<select value={displayZoom} onChange={e=>setDisplayZoom(Number(e.target.value))}>{[1,2,5,10].map(n=><option key={n} value={n}>{n}×</option>)}</select></label>
+        <DisplayScales aux={auxMode} scales={displayScales} zoom={displayZoom} onScales={setDisplayScales} onZoom={setDisplayZoom}/>
       </div></details>}
       {mode==='A12'&&<fieldset disabled={!board||(busy&&!acquiring)}><div className="form-grid">
         <label>软件触发源<select value={trigger.source} onChange={e=>changeTrigger('source',e.target.value)}>
@@ -336,7 +334,7 @@ export default function Bench({initialLive}){
       <details className="panel-section board-ui"><summary>接线与设备身份</summary><table><thead><tr><th>J1</th><th>信号</th><th>地</th></tr></thead><tbody>{pinout.map(([pin,name,,ground])=><tr key={pin}><td>{pin}</td><td>{name}</td><td>{ground}</td></tr>)}</tbody></table><small>{identity?.id} {identity?.build}</small></details></>)}
     {portal('scale',<>{plot&&primary?<><span className="channel-indicator ch1">CH1 · {(mode==='A12'&&viewScales[0])||identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span className="channel-indicator ch2">CH2 · {(mode==='A12'&&viewScales[1])||identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span>时基 {timeLabel((identity?.state.TDIV_US||TIME_US[td])/1e6/(mode==='A12'?zoom:1))}/div</span></>:<b>{modes[mode]}</b>}
       {mode==='A12'&&<span>{triggerStatus}</span>}</>)}
-    {portal('screen',<>{plot?scopeScreen:mode==='dashboard'?<Dashboard key={String(!!board)} board={board} run={run} td={td} vd={vd} trigger={trigger} cancelRef={dashboardCancel}/>:mode==='FRA'?<div className="board-card"><h2>频响测量</h2>{fra.length? <table><thead><tr><th>设定</th><th>实测频率</th><th>A2/A1 增益</th></tr></thead><tbody>{fra.map(p=><tr key={p.request}><td>{p.request} Hz</td><td>{format(p.hz)} Hz</td><td>{format(p.gain)} dB</td></tr>)}</tbody></table>:<p>等待采集频点</p>}</div>
+    {portal('screen',<>{plot?scopeScreen:mode==='dashboard'?<Dashboard key={String(!!board)} board={board} run={run} td={td} vd={vd} trigger={trigger} onBoardScale={requestScale} onVerified={state=>setIdentity(old=>old&&({...old,state}))} cancelRef={dashboardCancel}/>:mode==='FRA'?<div className="board-card"><h2>频响测量</h2>{fra.length? <table><thead><tr><th>设定</th><th>实测频率</th><th>A2/A1 增益</th></tr></thead><tbody>{fra.map(p=><tr key={p.request}><td>{p.request} Hz</td><td>{format(p.hz)} Hz</td><td>{format(p.gain)} dB</td></tr>)}</tbody></table>:<p>等待采集频点</p>}</div>
       :mode==='battery'?<div className="board-card"><h2>电池监测</h2><p>{battery?battery.mv/1000+' V · '+battery.level+' / 4 格':'等待读取电池'}</p></div>:null}</>)}
     {portal('footer',<><b>OpenScope RP2350B</b><span>{identity?.build||'HW2.1 R144 / R149'}</span><span>USB CDC</span>{frame&&<span>{format(frame.rate)} S/s</span>}<span>{frame?.quality}</span>{plot&&acquiring&&fps!==null&&<span>显示 {fps} 帧/s</span>}</>)}
   </>;
