@@ -1,17 +1,34 @@
 'use client';
-import {useEffect,useRef,useMemo,useLayoutEffect} from 'react';
+import {useEffect,useRef,useMemo,useLayoutEffect,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {spectrum,stats} from '../../src/openscope/display.mjs';
 export const colors=['#ffc107','#00d4ff','#93adff','#ed9fce'];
-export const format=(v,d=3)=>Number(v.toPrecision(d)).toLocaleString('en-US',{maximumFractionDigits:8});
+const numbers=new Intl.NumberFormat('en-US',{maximumFractionDigits:8});
+export const format=(v,d=3)=>numbers.format(Number(v.toPrecision(d)));
+const spectra=new WeakMap();
+function spectrumFor(frame,channel){
+  let cached=spectra.get(frame);
+  if(!cached){cached=[];spectra.set(frame,cached);}
+  if(cached[channel]===undefined)cached[channel]=spectrum(frame.channels[channel],frame.rate);
+  return cached[channel];
+}
 export const timeLabel=s=>s<.001?format(s*1e6)+' µs':s<1?format(s*1e3)+' ms':format(s)+' s';
 
-export default function Plot({frame,fft,visible,measureHost,hideMetrics=false,emptyText,viewScales,zoom=1,onPaint}) {
+export default function Plot({frame,fft,visible,measureHost,hideMetrics=false,emptyText,viewScales,zoom=1,onPaint,deferOffscreen=false}) {
   const ref=useRef(null),redraw=useRef(null),lastFrame=useRef(null);
+  const [onScreen,setOnScreen]=useState(!deferOffscreen);
+  useEffect(()=>{
+    if(!deferOffscreen)return;
+    const observer=new IntersectionObserver(([entry])=>setOnScreen(entry.isIntersecting));
+    observer.observe(ref.current);
+    return ()=>observer.disconnect();
+  },[deferOffscreen]);
   const names=frame?.group==='LA'?['D0','D1','D2','D3']:frame?.group==='A34'?['A3','A4']:['A1','A2'];
-  const specs=useMemo(()=>fft && frame ? frame.channels.map(ch=>spectrum(ch,frame.rate)):null,[frame,fft]);
+  const specs=useMemo(()=>fft&&frame&&onScreen
+    ?frame.channels.map((_,ch)=>visible?.[ch]===false?null:spectrumFor(frame,ch)):null,[frame,fft,onScreen,visible]);
   const metrics=useMemo(()=>measureHost&&!hideMetrics?frame?.channels.map(ch=>stats(ch,frame.rate)):null,[frame,measureHost,hideMetrics]);
   useLayoutEffect(()=>{
+    if(!onScreen){redraw.current=null;return;}
     const canvas=ref.current;
     function draw(){
       const r=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
@@ -84,9 +101,9 @@ export default function Plot({frame,fft,visible,measureHost,hideMetrics=false,em
       });
     }
     redraw.current=draw;draw();
-    if(frame && frame!==lastFrame.current)onPaint?.();
+    if(frame && frame!==lastFrame.current)onPaint?.(frame);
     lastFrame.current=frame;
-  },[frame,fft,specs,visible,viewScales,zoom,onPaint]);
+  },[frame,fft,specs,visible,viewScales,zoom,onPaint,onScreen]);
   useEffect(()=>{const observer=new ResizeObserver(()=>redraw.current?.());observer.observe(ref.current);return ()=>observer.disconnect();},[]);
   return <><div className="plot-wrap"><canvas ref={ref} aria-label={fft?'采集数据频谱':'实际采样波形'}/>{!frame && <div className="plot-empty">{emptyText||'等待读取实板波形'}</div>}</div>
     {frame && measureHost && !hideMetrics && createPortal(<div className="measure"><div><small>实际采样率 / 通道</small><b>{format(frame.rate)} S/s</b></div><div><small>帧内样点 / 通道</small><b>{frame.channels[0].length.toLocaleString()}</b></div>

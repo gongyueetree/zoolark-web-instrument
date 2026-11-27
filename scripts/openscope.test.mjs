@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WireDecoder,crc32,rawFrame,rollWindow,snapshot } from '../src/openscope/frames.mjs';
+import { DashboardSampler } from '../src/openscope/dashboard-capture.mjs';
 import { Instrument,BUILD } from '../src/openscope/instrument.mjs';
 import { SerialLink } from '../src/openscope/serial.mjs';
 import { scopeTrigger,averageWindows,spectrum } from '../src/openscope/display.mjs';
@@ -207,4 +208,65 @@ test('decoder retains fragmented binary payloads after the receive buffer is reu
   const one=zp(),two=zp();two[8]=7;
   for(const b of [...one,...two])decoder.feed(Uint8Array.of(b),e=>received.push(e));
   assert.deepEqual(received,[one,two]);assert.equal(decoder.tail.length,0);
+});
+
+test('dashboard streams until a command interrupts it and does not duplicate scope reads for FFT or outputs',async()=>{
+  const log=[],session=new AbortController();
+  const board={
+    async scopeSettings(){log.push('settings');return {};},
+    async captureScope(td,vd,progress,signal,source,frame){
+      log.push('start');
+      for(let seq=0;seq<4;seq++){if(signal.aborted)break;frame({group:'A12',seq});}
+      assert.ok(signal.aborted);log.push('stop');
+    }
+  };
+  const sampler=new DashboardSampler(board);
+  const plan={primary:true,secondary:[],continuous:true,td:3,vd:4,source:'board'};
+  await sampler.capture(plan,session.signal,{
+    onSettings(){},onFrame(f){log.push(f.seq);if(f.seq===2)session.abort();}
+  });
+  assert.deepEqual(log,['settings','start',0,1,2,'stop']);
+});
+
+test('dashboard yields RAW2 to due snapshots only after a scope frame and services single captures once',async()=>{
+  let now=0;
+  const log=[],groups=[];
+  const board={
+    async scopeSettings(){log.push('settings');return {};},
+    async captureScope(td,vd,progress,signal,source,frame){
+      if(!frame){log.push('once');return {group:'A12'};}
+      log.push('start');
+      for(let i=0;i<20&&!signal.aborted;i++){now+=25;frame({group:'A12'});}
+      assert.ok(signal.aborted);log.push('stop');
+    },
+    async captureGroup(group){log.push(group);return {group};},
+    async battery(){log.push('battery');return {};}
+  };
+  const sampler=new DashboardSampler(board,()=>now);
+  const plan={primary:true,secondary:['A34','LA','battery'],continuous:true,td:3,vd:4,source:'board'};
+  const signal=new AbortController().signal,events={onFrame:f=>groups.push(f.group),onSettings(){},onBattery(){}};
+  await sampler.capture(plan,signal,events);
+  await sampler.capture(plan,signal,events);
+  assert.deepEqual(log,['settings','start','stop','A34','LA','battery','start','stop','A34','LA']);
+  assert.equal(groups.filter(g=>g==='A12').length,11);
+  log.length=0;
+  await sampler.capture({...plan,continuous:false},signal,events);
+  assert.deepEqual(log,['once','A34','LA','battery']);
+  log.length=0;
+  await sampler.capture({...plan,td:12},signal,events);
+  assert.deepEqual(log,['settings','once']);
+});
+
+test('cancelled hardware reconfiguration rechecks the board when returning to the previous timebase',async()=>{
+  const middle=new AbortController(),settings=[];
+  const sampler=new DashboardSampler({
+    async scopeSettings(td){settings.push(td);if(td===4)middle.abort();return {};},
+    async captureScope(){return {group:'A12'};}
+  });
+  const plan={primary:true,secondary:[],continuous:false,td:3,vd:3,source:'free'};
+  const signal=new AbortController().signal, events={onFrame(){},onSettings(){}};
+  await sampler.capture(plan,signal,events);
+  await sampler.capture({...plan,td:4},middle.signal,events);
+  await sampler.capture(plan,signal,events);
+  assert.deepEqual(settings,[3,4,3]);
 });
