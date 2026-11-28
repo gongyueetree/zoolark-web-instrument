@@ -5,6 +5,17 @@ import {spectrum,stats} from '../../src/openscope/display.mjs';
 export const colors=['#ffc107','#00d4ff','#93adff','#ed9fce'];
 const numbers=new Intl.NumberFormat('en-US',{maximumFractionDigits:8});
 export const format=(v,d=3)=>numbers.format(Number(v.toPrecision(d)));
+function frequencyLabel(hz){
+  if(hz==null)return '—';
+  const rounded=Number(hz.toPrecision(3));
+  if(rounded>=1e6)return format(rounded/1e6)+' MHz';
+  if(rounded>=1e3)return format(rounded/1e3)+' kHz';
+  return format(rounded)+' Hz';
+}
+function rmsLabel(volts){
+  const rounded=Number(volts.toPrecision(3));
+  return rounded>0&&rounded<1?format(rounded*1000)+' mV':format(rounded)+' V';
+}
 const spectra=new WeakMap();
 function spectrumFor(frame,channel){
   let cached=spectra.get(frame);
@@ -108,7 +119,11 @@ export default function Plot({frame,fft,visible,measureHost,hideMetrics=false,em
   return <><div className="plot-wrap"><canvas ref={ref} aria-label={fft?'采集数据频谱':'实际采样波形'}/>{!frame && <div className="plot-empty">{emptyText||'等待读取实板波形'}</div>}</div>
     {frame && measureHost && !hideMetrics && createPortal(<div className="measure"><div><small>实际采样率 / 通道</small><b>{format(frame.rate)} S/s</b></div><div><small>帧内样点 / 通道</small><b>{frame.channels[0].length.toLocaleString()}</b></div>
     {metrics.map((m,i)=><div key={i}><small style={{color:colors[i]}}>{names[i]} · {frame.group==='LA'?'高电平占比':'峰峰值'}</small><b>{frame.group==='LA'?format(m.mean*100)+' %':format(m.max-m.min)+' Vpp'}</b></div>)}
-    {frame.group!=='LA'&&metrics.map((m,i)=><div key={'hz'+i}><small>{names[i]} · 频率 / RMS</small><b>{m.hz?format(m.hz)+' Hz':'—'} / {format(m.rms)} V</b></div>)}
+    {frame.group!=='LA'&&<table className="scope-readings" aria-label="通道频率和有效值">
+      <thead><tr><th scope="col">通道</th><th scope="col">频率</th><th scope="col">RMS</th></tr></thead>
+      <tbody>{metrics.map((m,i)=><tr key={names[i]}><th scope="row" style={{color:colors[i]}}>{names[i]}</th>
+        <td>{frequencyLabel(m.hz)}</td><td>{rmsLabel(m.rms)}</td></tr>)}</tbody>
+    </table>}
     </div>,measureHost)}
   </>;
 }

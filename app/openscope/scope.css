@@ -23,12 +23,18 @@ body.board-live .control-panel{display:flex!important;min-width:0;flex-shrink:0}
 .board-ui .row{display:flex;flex-wrap:wrap;gap:6px}
 .board-ui p,.board-card p{font-size:14px;line-height:1.6;color:var(--text-secondary)}
 .board-ui .notice{font-size:13px;overflow-wrap:anywhere;color:#94c8dd}.board-ui .error{color:#ffb39a}
-.board-ui details,.board-ui table{font-size:12px;color:var(--text-secondary);overflow-wrap:anywhere}
 .board-live .plot-wrap{position:relative;flex:1;min-height:160px}
 .board-live .plot-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .board-live .plot-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--text-secondary);pointer-events:none}
 .board-live .measure{display:grid;gap:6px}.board-live .measure>div{display:flex;justify-content:space-between;gap:5px;background:var(--bg-control);padding:8px;border-radius:4px}
 .board-live .measure b{font:600 12px ui-monospace,monospace;color:var(--primary-color)}
+.scope-readings{width:100%;table-layout:fixed;border-collapse:collapse;white-space:nowrap}
+.scope-readings th,.scope-readings td{padding:4px 6px;text-align:right;line-height:20px}
+.scope-readings thead th{font-size:12px;font-weight:500;color:var(--text-secondary)}
+.scope-readings th:first-child{width:3.2em;text-align:left}
+.scope-readings tbody{background:var(--bg-control)}
+.scope-readings tbody th{font-size:13px}
+.scope-readings td{font:600 12px/20px ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--primary-color)}
 .board-live .board-card{margin:clamp(16px,3vw,48px);padding:24px;background:var(--bg-panel);border:1px solid var(--border-color);border-radius:10px}.board-card h2,.board-card h3{margin-bottom:12px}
 .board-live .fft-container{display:block}.board-live .fft-container>label{justify-content:space-between}.board-live .fft-container .plot-wrap{height:18vh}
 @media(max-width:800px){.board-live .header{flex-wrap:wrap;gap:8px;padding:8px 12px}.board-live .nav-menu{order:3;flex-basis:100%}.board-live .header-actions{margin-left:auto}.board-live .main-content{flex-direction:column;overflow:auto}.board-live .control-panel{width:100%;max-height:40vh}.board-live .display-area{min-height:45vh}.board-live .display-header{flex-wrap:wrap;gap:5px}.board-live .status-bar{padding:4px 8px}}

@@ -63,7 +63,7 @@ export default function Outputs({kind,board,run,busy,displayHost}){
     return <Quantity title={title} type={type} value={draft[key]} min={min} max={max} step={step} unit={units[key]} onUnitChange={unit=>setUnits(old=>({...old,[key]:unit}))}
       onChange={value=>setDraft(old=>({...old,[key]:value}))}/>;
   }
-  return <><h2>{names[kind]}</h2><p className="muted">{kind==='wav'?'J1-11 · WAV_OUT，相邻 J1-12 接地。幅度按峰峰值设置，叠加偏置后波峰和波谷须在 ±4 V 内。':kind==='pwm'?'J1-9 · PWM_OUT，相邻 J1-10 接地。占空比支持 0% 和 100%。':'J1-13 · DC_PWM，相邻 J1-14 接地。设定范围 −4 至 +4 V，板端提供未校准的反馈电压。'}</p>
+  return <><h2>{names[kind]}</h2><p className="muted">{kind==='wav'?'幅度按峰峰值设置，叠加偏置后波峰和波谷须在 ±4 V 内。':kind==='pwm'?'占空比支持 0% 和 100%。':'设定范围 −4 至 +4 V，板端提供未校准的反馈电压。'}</p>
     <fieldset disabled={busy||pending}><form onSubmit={e=>{e.preventDefault();command('apply');}}>
       <div className="form-grid">
         {kind==='wav'&&<label>波形<select value={draft.wave} onChange={e=>setDraft({...draft,wave:Number(e.target.value)})}>{waves.map((w,i)=><option key={w} value={i}>{w}</option>)}</select></label>}

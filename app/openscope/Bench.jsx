@@ -14,12 +14,6 @@ import './scope.css';
 
 const modes={dashboard:'自定义仪表板',A12:'示波器 A1/A2',A34:'示波器 A3/A4',FFT:'频谱',LA:'逻辑分析',FRA:'频响',wav:'WAV',pwm:'PWM',dc:'DC',battery:'电池'};
 const traces=['A12','A34','FFT','LA'];
-const pinout=[
-  ['1 / 3','A1 / A2','MAX1193 · 8 位双通道','2 / 4'],
-  ['5 / 7','A3 / A4','GPIO44 / 43 · ADC4 / ADC3','6 / 8'],
-  ['9 / 11 / 13','PWM / WAV / DC','三路独立输出','10 / 12 / 14'],
-  ['15 / 16 / 17 / 18','D0 / D1 / D2 / D3','GPIO18 / 17 / 20 / 19','20'],
-];
 const navigation={'custom-dashboard':'dashboard','oscilloscope':'A12','spectrum-analyzer':'FFT','logic-analyzer':'LA','network-analyzer':'FRA','waveform-generator':'wav','pwm-generator':'pwm','power-supply':'dc','battery-monitor':'battery'};
 export default function Bench({initialLive}){
   const [live,setLive]=useState(initialLive),[slots,setSlots]=useState(null);
@@ -329,12 +323,11 @@ export default function Bench({initialLive}){
       {plot?scopeControls:otherControls}
       {connection.text&&<div role="alert" className={'notice '+(connection.failed?'error':'')}>{connection.text}</div>}
       {msg&&<div role="status" className={'notice '+(error?'error':'')}>{msg}</div>}
-      </div>{plot&&<div className="panel-section"><h3 className="panel-title">测量</h3><div className="board-metrics"/></div>}
-      <details className="panel-section board-ui"><summary>接线与设备身份</summary><table><thead><tr><th>J1</th><th>信号</th><th>地</th></tr></thead><tbody>{pinout.map(([pin,name,,ground])=><tr key={pin}><td>{pin}</td><td>{name}</td><td>{ground}</td></tr>)}</tbody></table><small>{identity?.id} {identity?.build}</small></details></>)}
+      </div>{plot&&<div className="panel-section"><h3 className="panel-title">测量</h3><div className="board-metrics"/></div>}</>)}
     {portal('scale',<>{plot&&primary?<><span className="channel-indicator ch1">CH1 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span className="channel-indicator ch2">CH2 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span>时基 {timeLabel((identity?.state.TDIV_US||TIME_US[td])/1e6)}/div</span></>:<b>{modes[mode]}</b>}
       {mode==='A12'&&<span>{triggerStatus}</span>}</>)}
     {portal('screen',<>{plot?scopeScreen:mode==='dashboard'?<Dashboard key={String(!!board)} board={board} run={run} td={td} vd={vd} trigger={trigger} onBoardScale={requestScale} onVerified={state=>setIdentity(old=>old&&({...old,state}))} cancelRef={dashboardCancel}/>:mode==='FRA'?<div className="board-card"><h2>频响测量</h2>{fra.length? <table><thead><tr><th>设定</th><th>实测频率</th><th>A2/A1 增益</th></tr></thead><tbody>{fra.map(p=><tr key={p.request}><td>{p.request} Hz</td><td>{format(p.hz)} Hz</td><td>{format(p.gain)} dB</td></tr>)}</tbody></table>:<p>等待采集频点</p>}</div>
       :mode==='battery'?<div className="board-card"><h2>电池监测</h2><p>{battery?battery.mv/1000+' V · '+battery.level+' / 4 格':'等待读取电池'}</p></div>:null}</>)}
-    {portal('footer',<><b>OpenScope RP2350B</b><span>{identity?.build||'HW2.1 R144 / R149'}</span><span>USB CDC</span>{frame&&<span>{format(frame.rate)} S/s</span>}<span>{frame?.quality}</span>{plot&&acquiring&&fps!==null&&<span>显示 {fps} 帧/s</span>}</>)}
+    {portal('footer',<><b>OpenScope RP2350B</b><span>USB CDC</span>{frame&&<span>{format(frame.rate)} S/s</span>}<span>{frame?.quality}</span>{plot&&acquiring&&fps!==null&&<span>显示 {fps} 帧/s</span>}</>)}
   </>;
 }
