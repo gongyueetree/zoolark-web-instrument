@@ -92,3 +92,7 @@ body.board-live .control-panel{display:flex!important;min-width:0;flex-shrink:0}
 @container(max-width:740px){.live-grid>article{grid-column:1/-1}.live-grid .scope-card .plot-wrap{min-height:clamp(280px,42vh,440px)}}
 @media(min-width:801px){body.board-live:has(.live-dashboard) .control-panel{width:clamp(175px,14vw,225px)}}
 @media(max-width:800px){.live-grid>article{grid-column:1/-1}.board-live:has(.live-dashboard) .display-area{min-height:65vh}}
+.fra-results{overflow:auto}.fra-chart{display:block;width:100%;max-height:38vh;margin-bottom:12px}
+.fra-results table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.fra-results th,.fra-results td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border-color)}
+.fra-results th{color:var(--text-secondary);font-size:13px}

@@ -7,6 +7,8 @@ import {TIME_US,VDIV_MV} from '../../src/openscope/frames.mjs';
 import {scopeTrigger,averageWindows,stats} from '../../src/openscope/display.mjs';
 import Plot,{timeLabel,format} from './Plot';
 import Outputs from './Outputs';
+import {FraControls,FraResults,downloadFra} from './FrequencyResponse';
+import {checkFraHz,externalPoint,InvalidFraPoint,measureWithWav,sweepTargets} from '../../src/openscope/fra.mjs';
 import Quantity from './Quantity';
 import Dashboard from './Dashboard';
 import {BoardScales,DisplayScales} from './ScopeScales';
@@ -69,22 +71,31 @@ export default function Bench({initialLive}){
   const [trigger,setTrigger]=useState({source:'board',edge:'rise',level:'0',average:1});
   const [triggerStatus,setTriggerStatus]=useState('');
   const triggerRef=useRef(trigger);
-  const [frame,setFrame]=useState(null),[battery,setBattery]=useState(null),[freq,setFreq]=useState('1000'),[fra,setFra]=useState([]);
+  const [frame,setFrame]=useState(null),[battery,setBattery]=useState(null),[fraSource,setFraSource]=useState('auto'),[fra,setFra]=useState([]);
   const owner=useRef(null),lock=useRef(false),generation=useRef(0),active=useRef(null);
+  const fraJob=useRef(null);
   const plot=traces.includes(mode), primary=mode==='A12'||mode==='FFT';
   function message(text,isError=false){setMsg(text);setError(isError);}
   function clearDevice(){setBoard(null);setIdentity(null);setFrame(null);setBattery(null);setFra([]);setTriggerStatus('');}
   function drop(text,isError){
+    if(fraJob.current){
+      fraJob.current.controller.abort();
+      if(isError&&fraJob.current.wav)text+='。USB 已中断，请在仪器上确认 WAV 输出状态。';
+      fraJob.current=null;
+    }
     generation.current++;active.current?.abort();active.current=null;nextMode.current=null;lock.current=false;
     setBusy(false);setAcquiring(false);clearDevice();message('');setConnection({text,failed:isError});
   }
   async function disconnect(){
     const link=owner.current;
+    const job=fraJob.current;
+    if(job){job.controller.abort();await job.done;}
+    if(link!==owner.current)return;
     drop('连接已断开。重新连接后将再次读取板端状态。',false);
     if(link){lock.current=true;setBusy(true);await link.close();if(owner.current===link){owner.current=null;lock.current=false;setBusy(false);}}
   }
   useEffect(()=>{
-    const unload=()=>{active.current?.abort();void owner.current?.close();};
+    const unload=()=>{fraJob.current?.controller.abort();active.current?.abort();void owner.current?.close();};
     window.addEventListener('pagehide',unload);
     return ()=>{window.removeEventListener('pagehide',unload);generation.current++;unload();};
   },[]);
@@ -142,9 +153,44 @@ export default function Bench({initialLive}){
   }
   function changeMode(next){
     if(mode===next)return;
+    if(fraJob.current){nextMode.current=next;fraJob.current.controller.abort();return;}
     if(active.current){nextMode.current=next;active.current.abort();return;}
     if(lock.current){if(mode==='dashboard'){nextMode.current=next;dashboardCancel.current?.();}return;}
     setMode(next);setFrame(null);setTriggerStatus('');message('');
+  }
+  async function startFra({freq,low,high,count,sweep=false}){
+    if(!board||lock.current)return;
+    const wav=fraSource==='wav',controller=new AbortController(),signal=controller.signal;
+    const job={controller,wav},gen=generation.current;
+    fraJob.current=job;
+    const save=p=>{
+      if(gen!==generation.current||signal.aborted)return;
+      setFra(previous=>[...previous.filter(row=>row.target!==p.target),p].sort((a,b)=>a.target-b.target));
+    };
+    job.done=run(async()=>{
+      try{
+        if(wav){
+          const targets=sweep?sweepTargets(Number(low),Number(high),Number(count)):[checkFraHz(Number(freq),true)];
+          if(sweep)setFra([]);
+          let valid=0;
+          await measureWithWav(board,targets,signal,p=>{save(p);if(p.gain!=null)valid++;},
+            (hz,i)=>message('正在测量 '+(i+1)+' / '+targets.length+' · '+hz+' Hz'));
+          if(!valid)throw new Error('没有有效频点，请查看各点的板端测量结果');
+        }else{
+          const auto=fraSource==='auto';
+          message(auto?'正在识别 A1 参考频率…':'正在采集指定频点…');
+          try{save(await externalPoint(board,Number(freq),auto,signal));}
+          catch(e){
+            if(!auto&&e instanceof InvalidFraPoint)save({target:Number(freq),hz:e.actual,gain:null,phase:null,reason:e.message});
+            throw e;
+          }
+        }
+      }catch(e){
+        if(e.name==='AbortError')throw new Error('测量已停止');
+        throw e;
+      }finally{if(fraJob.current===job)fraJob.current=null;}
+    });
+    await job.done;
   }
   function changeTrigger(key,value){
     const next={...triggerRef.current,[key]:value};
@@ -254,6 +300,11 @@ export default function Bench({initialLive}){
         const id=navigation[el.dataset.instrument];if(id)changeMode(id==='A12'&&mode==='A34'?'A34':id);
       }else if(el.id==='screenshot-btn'||el.id==='export-btn'){
         e.preventDefault();e.stopImmediatePropagation();
+        if(mode==='FRA'){
+          try{downloadFra(fra,slots.screen.querySelector('.fra-chart'),el.id==='screenshot-btn');}
+          catch(e){message(e.message,true);}
+          return;
+        }
         if(!frame||!plot){message('请先采集一帧数据。');return;}
         const a=document.createElement('a');
         if(el.id==='screenshot-btn'){
@@ -310,9 +361,9 @@ export default function Bench({initialLive}){
     <Plot frame={frame} scopeGroup={mode==='A12'||auxMode?mode:undefined} onPaint={countPaint} fft={mode==='FFT'} viewScales={auxMode?auxScales:undefined} zoom={auxMode?auxZoom:1} visible={visible} emptyText={board?(acquiring?'正在等待实板采集…':'点击左侧「运行」或「单次」开始采集'):'连接 USB 仪器后可采集波形'} measureHost={slots.controls.querySelector('.board-metrics')}/>
     {mode==='A12'&&<div className="fft-container"><label>FFT 频谱分析 <input type="checkbox" checked={sideFFT} onChange={e=>setSideFFT(e.target.checked)}/></label>{sideFFT&&<Plot frame={frame} fft visible={visible} hideMetrics/>}</div>}
   </>;
-  const otherControls=mode==='dashboard'?<p>在同一屏添加仪器。示波器和频谱共用一帧采样。</p>:mode==='FRA'?<><p>外部正弦源接被测电路输入，A1 测参考，A2 测响应。</p>
-    <fieldset disabled={!board||busy}><Quantity title="外部源频率" type="frequency" min={1000} max={20000} value={freq} onChange={setFreq}/>
-    <button className="primary" onClick={()=>run(async()=>{const point=await board.fra(Number(freq));setFra(old=>[...old.filter(p=>p.request!==Number(freq)),{...point,request:Number(freq)}].sort((a,b)=>a.request-b.request));})}>采集频点</button></fieldset></>
+  const otherControls=mode==='dashboard'?<p>在同一屏添加仪器。示波器和频谱共用一帧采样。</p>:mode==='FRA'?<FraControls
+    source={fraSource} onSource={value=>{setFraSource(value);setFra([]);message('');}} board={board} busy={busy}
+    running={!!fraJob.current} start={startFra} stop={()=>fraJob.current?.controller.abort()}/>
     :mode==='battery'?<button className="primary" disabled={!board||busy} onClick={()=>run(async()=>setBattery(await board.battery()))}>读取电池</button>
     :<Outputs key={mode+String(!!board)} kind={mode} board={board} run={run} busy={busy} displayHost={slots.screen}/>;
   return <>
@@ -326,7 +377,7 @@ export default function Bench({initialLive}){
       </div>{plot&&<div className="panel-section"><h3 className="panel-title">测量</h3><div className="board-metrics"/></div>}</>)}
     {mode!=='dashboard'&&portal('scale',<>{plot&&primary?<><span className="channel-indicator ch1">CH1 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span className="channel-indicator ch2">CH2 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span>时基 {timeLabel((identity?.state.TDIV_US||TIME_US[td])/1e6)}/div</span></>:<b>{modes[mode]}</b>}
       {mode==='A12'&&<span>{triggerStatus}</span>}</>)}
-    {portal('screen',<>{plot?scopeScreen:mode==='dashboard'?<Dashboard key={String(!!board)} toolbarHost={slots.scale} board={board} run={run} td={td} vd={vd} trigger={trigger} onBoardScale={requestScale} onVerified={state=>setIdentity(old=>old&&({...old,state}))} cancelRef={dashboardCancel}/>:mode==='FRA'?<div className="board-card"><h2>频响测量</h2>{fra.length? <table><thead><tr><th>设定</th><th>实测频率</th><th>A2/A1 增益</th></tr></thead><tbody>{fra.map(p=><tr key={p.request}><td>{p.request} Hz</td><td>{format(p.hz)} Hz</td><td>{format(p.gain)} dB</td></tr>)}</tbody></table>:<p>等待采集频点</p>}</div>
+    {portal('screen',<>{plot?scopeScreen:mode==='dashboard'?<Dashboard key={String(!!board)} toolbarHost={slots.scale} board={board} run={run} td={td} vd={vd} trigger={trigger} onBoardScale={requestScale} onVerified={state=>setIdentity(old=>old&&({...old,state}))} cancelRef={dashboardCancel}/>:mode==='FRA'?<FraResults rows={fra}/>
       :mode==='battery'?<div className="board-card"><h2>电池监测</h2><p>{battery?battery.mv/1000+' V · '+battery.level+' / 4 格':'等待读取电池'}</p></div>:null}</>)}
     {portal('footer',<><b>OpenScope RP2350B</b><span>USB CDC</span>{frame&&<span>{format(frame.rate)} S/s</span>}<span>{frame?.quality}</span>{plot&&acquiring&&fps!==null&&<span>显示 {fps} 帧/s</span>}</>)}
   </>;

@@ -1,4 +1,5 @@
 import { fields, integer, rawFrame, requireWire, rollWindow, snapshot, TIME_US, VDIV_MV } from './frames.mjs';
+import { checkFraHz, InvalidFraPoint } from './fra.mjs';
 import { DeviceRefusal } from './serial.mjs';
 
 export const BUILD = 'HW21_R149_USB_HANDOFF_RECONNECT_20261125';
@@ -186,7 +187,7 @@ export class Instrument {
     return {mv:integer(st.SET_MV,-4000,4000),feedback:integer(st.FB_VALID,0,1)?integer(st.FB_MV,-2147483648,2147483647):null,
       state:st.STATE,on:Number(st.STATE==='ON'),fault:integer(st.FAULT,0,0xffffffff)};
   }
-  async output(kind,action,values={}) {
+  async output(kind,action,values={},page=pageFor[kind]) {
     requireWire(this.verified && Object.hasOwn(pageFor,kind),'输出不可用');
     if(action==='read')return this.readOutput(kind);
     const {hz,wave,amp,offset,peak,duty,mv}=values;
@@ -198,7 +199,8 @@ export class Instrument {
       } else if(kind==='pwm'){ integer(hz,1,1000000); integer(duty,0,100); }
       else integer(mv,-4000,4000);
     }
-    await this.page(pageFor[kind]);
+    // WAV configuration is also available on the FRA page during a sweep.
+    await this.page(page);
     if(action==='apply'){
       if(kind==='wav'){
         const old=await this.readOutput(kind);
@@ -232,23 +234,37 @@ export class Instrument {
     requireWire(h.VALID==='1' && h.GPIO==='47' && h.ADC==='7','电池 ADC 尚无有效读数');
     return {mv:integer(h.MV,0,10000),level:integer(h.LEVEL,0,4),cal:h.CAL};
   }
-  async fra(hz) {
-    integer(hz,1000,20000);
+  async fra(hz,signal) {
+    checkFraHz(hz);
+    signal?.throwIfAborted();
     await this.page(6);
-    const last=hz===20000, range=last?[1000,hz]:[hz,20000];
-    await this.query('FRA:CFG '+range.join(' ')+' 2 100 1','FRA|OK=CFG');
-    await this.query('FRA:POINT '+Number(last),'FRA|OK=POINT');
+    const last=hz===20000, range=last?[19900,hz]:[hz,20000];
     const status=async()=>fields(await this.query('FRA:UI?','FRA|'),'FRA|');
-    const before=await status();
-    await this.query('FRA:CAP','FRA|OK=PENDING');
+    await this.query('FRA:CFG '+range.join(' ')+' 2 100 1','FRA|OK=CFG');
     try {
+      await this.query('FRA:POINT '+Number(last),'FRA|OK=POINT');
+      const before=await status();
+      integer(before.SEQ,0,0xffffffff);
+      signal?.throwIfAborted();
+      await this.query('FRA:CAP','FRA|OK=PENDING');
       for(let i=0;i<60;i++){
-        await delay(100); const h=await status();
-        if(h.PENDING==='1' || before.SEQ===h.SEQ)continue;
-        requireWire(h.VALID==='1' && +h.POINT===Number(last) && h.SOURCE==='EXTERNAL','测量无效 · '+h.STATE);
-        const gain=+h.GAIN_DB, actual=+h.ACTUAL_HZ;
-        requireWire(Number.isFinite(gain) && actual>0 && Number.isFinite(actual),'频响结果无效');
-        return {hz:actual,gain};
+        await delay(100);signal?.throwIfAborted();
+        const h=await status();
+        if(h.PENDING==='1'||h.SEQ===before.SEQ)continue;
+        integer(h.SEQ,0,0xffffffff);
+        requireWire(h.PENDING==='0'&&h.PAGE==='6'&&h.POINT===String(Number(last))&&h.REF==='1'&&
+          h.SOURCE==='EXTERNAL'&&Math.abs(Number(h.HZ)-hz)<.1,'板端频点或参考通道已改变，请重新采集');
+        const actual=Number(h.ACTUAL_HZ),gain=Number(h.GAIN_DB);
+        const currentSnapshot=h.RAW_SEQ===h.SEQ&&h.RAW_POINT===h.POINT;
+        if(h.VALID!=='1'){
+          const hasTone=currentSnapshot&&Number(h.RAW_FRAMES)>0&&Number.isFinite(actual)&&actual>0;
+          throw new InvalidFraPoint(h.STATE,hz,hasTone?actual:null);
+        }
+        requireWire(h.STATE==='VALID_UNCAL'&&h.RAW_FRAMES==='2'&&currentSnapshot&&
+          Number.isFinite(gain)&&Math.abs(actual/hz-1)<=.01001,'频响结果与当前采集不符');
+        const paired=Number(h.PHASE_PAIRED_DEG);
+        const phase=h.PAIR_ALIGNED==='1'&&h.PAIR_REPEAT_OK==='1'&&Math.abs(paired)<=180?paired:null;
+        return {target:hz,hz:actual,gain,phase};
       }
       throw new Error('等待频响测量超时');
     } finally { if(!this.link.closed)await this.query('FRA:CANCEL','FRA|OK=CANCEL'); }

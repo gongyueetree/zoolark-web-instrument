@@ -270,3 +270,65 @@ test('cancelled hardware reconfiguration rechecks the board when returning to th
   await sampler.capture(plan,signal,events);
   assert.deepEqual(settings,[3,4,3]);
 });
+
+test('FRA follows the measured A1 tone only after a fresh validated recapture',async()=>{
+  const {externalPoint}=await import('../src/openscope/fra.mjs');
+  let seq=7,target,finished=false,source=2500,wrongSeq=false;
+  const {link,log}=serial(cmd=>{
+    if(cmd==='LINK:STATE?')return line(state(6));
+    if(cmd.startsWith('FRA:CFG ')){target=Number(cmd.split(' ')[1]);finished=false;return line('FRA|OK=CFG');}
+    if(cmd==='FRA:POINT 0')return line('FRA|OK=POINT');
+    if(cmd==='FRA:CANCEL')return line('FRA|OK=CANCEL');
+    if(cmd==='FRA:CAP'){finished=true;seq++;return line('FRA|OK=PENDING');}
+    if(cmd==='FRA:UI?'){
+      const ok=finished&&target===source;
+      return line('FRA|PAGE=6|POINT=0|REF=1|SOURCE=EXTERNAL|PENDING=0|SEQ='+seq+'|HZ='+target+
+        '|VALID='+Number(ok)+'|STATE='+(ok?'VALID_UNCAL':'FREQUENCY_MISMATCH')+'|ACTUAL_HZ='+source+
+        '|RAW_FRAMES=2|RAW_SEQ='+(wrongSeq?seq-1:seq)+'|RAW_POINT=0|PAIR_ALIGNED=1|PAIR_REPEAT_OK=0|PHASE_PAIRED_DEG=120|GAIN_DB=-6.02');
+    }
+    return line(identity(cmd));
+  });
+  const signal=new AbortController().signal;
+  await link.open();
+  try{
+    const board=new Instrument(link);await board.identify();
+    assert.deepEqual(await externalPoint(board,1000,true,signal),{target:2500,hz:2500,gain:-6.02,phase:null});
+    assert.equal(log.filter(cmd=>cmd==='FRA:CAP').length,2);
+    await assert.rejects(externalPoint(board,1000,false,signal),/1,000 Hz.*2,500 Hz/);
+    source=100000;
+    await assert.rejects(externalPoint(board,1000,true,signal),/100,000 Hz.*1–20 kHz/);
+    assert.equal(log.filter(cmd=>cmd==='FRA:CAP').length,4);
+    source=1000;wrongSeq=true;
+    await assert.rejects(board.fra(1000),/当前采集不符/);
+    assert.equal(log.at(-1),'FRA:CANCEL');
+    assert.ok(!log.some(cmd=>cmd.startsWith('FUNC:')));
+  }finally{await link.close();}
+});
+
+test('onboard FRA quantizes sweep points and restores the prior WAV after completion, cancellation and errors',async()=>{
+  const {measureWithWav,sweepTargets}=await import('../src/openscope/fra.mjs');
+  assert.deepEqual(sweepTargets(1000,1100,32),[1000,1100]);
+  assert.throws(()=>sweepTargets(1000,1050,2),/100 Hz/);
+  for(const outcome of ['ok','abort','fault']){
+    const old={wave:1,hz:100000,amp:40,offset:3,peak:50,on:outcome==='ok'?0:1,fault:0};
+    let wav={...old},points=[],targets=[];
+    const controller=new AbortController();
+    const board={readOutput:async()=>({...wav}),page:async()=>{},query:async cmd=>{assert.equal(cmd,'FUNC:OUTPUT OFF');wav.on=0;},
+      output:async(kind,action,draft)=>{
+        if(action==='apply')wav={...wav,...draft,on:wav.on};
+        else wav.on=Number(action==='on');
+        return {...wav};
+      },
+      fra:async hz=>{
+        assert.deepEqual([wav.hz,wav.wave,wav.amp,wav.offset,wav.on],[hz,2,10,0,1]);
+        if(outcome==='abort')controller.abort();
+        if(outcome==='fault')throw new Error('capture failed');
+        return {target:hz,hz,gain:0};
+      }};
+    const job=measureWithWav(board,[1000,20000],controller.signal,p=>points.push(p),hz=>targets.push(hz));
+    if(outcome==='ok')await job;
+    else await assert.rejects(job,outcome==='abort'?/abort/i:/capture failed/);
+    assert.deepEqual(targets,outcome==='ok'?[1000,20000]:[1000]);
+    assert.deepEqual(wav,old);
+  }
+});
