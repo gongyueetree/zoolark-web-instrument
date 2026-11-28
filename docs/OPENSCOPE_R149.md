@@ -1,6 +1,6 @@
 # OpenScope RP2350B 实板工作台
 
-首页 **OpenScope 实板** 和 **连接真机 → OpenScope / R144 · R149 → 连接设备** 都会在当前 ZooLark View 中打开串口。`/openscope` 是同一界面的直接入口。成功后顶部显示 **Zoolark Pro 已连接**，将鼠标悬停在连接状态上可查看固件版本，左侧 **运行** 或 **单次** 启动采样。选择桌面 Chrome 或 Edge，通过 HTTPS 或 localhost 打开。先关闭 ZooLark Pro Display 及串口终端，用数据线接 J3，仪器正常开机后点击 **连接 USB 仪器**。设备选择器仅列出 USB VID:PID 为 `CAFE:4001` 的 CDC 端口。板端开机流程可能已启用 WAV，接线前在 WAV 页读取或关闭输出。
+首页和 `/openscope` 均直接打开 ZooLark View 实板工作台。点击 **连接 USB 仪器** 并选择设备串口。成功后顶部显示 **Zoolark Pro 已连接**，将鼠标悬停在连接状态上可查看固件版本，左侧 **运行** 或 **单次** 启动采样。选择桌面 Chrome 或 Edge，通过 HTTPS 或 localhost 打开。先关闭 ZooLark Pro Display 及串口终端，用数据线接 J3，仪器正常开机后点击 **连接 USB 仪器**。设备选择器仅列出 USB VID:PID 为 `CAFE:4001` 的 CDC 端口。板端开机流程可能已启用 WAV，接线前在 WAV 页读取或关闭输出。
 
 ## 身份与硬件
 

@@ -1,6 +1,6 @@
 'use client';
 import {useState,useRef,useEffect,useCallback} from 'react';
-import {createPortal} from 'react-dom';
+import {InstrumentHeader,DisplayActions} from './InstrumentHeader';
 import {Instrument,USB} from '../../src/openscope/instrument.mjs';
 import {SerialLink} from '../../src/openscope/serial.mjs';
 import {TIME_US,VDIV_MV} from '../../src/openscope/frames.mjs';
@@ -16,34 +16,11 @@ import './scope.css';
 
 const modes={dashboard:'自定义仪表板',A12:'示波器 A1/A2',A34:'示波器 A3/A4',FFT:'频谱',LA:'逻辑分析',FRA:'频响',wav:'WAV',pwm:'PWM',dc:'DC',battery:'电池'};
 const traces=['A12','A34','FFT','LA'];
-const navigation={'custom-dashboard':'dashboard','oscilloscope':'A12','spectrum-analyzer':'FFT','logic-analyzer':'LA','network-analyzer':'FRA','waveform-generator':'wav','pwm-generator':'pwm','power-supply':'dc','battery-monitor':'battery'};
-export default function Bench({initialLive}){
-  const [live,setLive]=useState(initialLive),[slots,setSlots]=useState(null);
+export default function Bench(){
+  const [screen,setScreen]=useState(null),[toolbar,setToolbar]=useState(null),[measureHost,setMeasureHost]=useState(null);
+  const displayArea=useRef(null);
   const [visible,setVisible]=useState([true,true]),[sideFFT,setSideFFT]=useState(false);
   const nextMode=useRef(null),dashboardCancel=useRef(null);
-  function selectLive(value){
-    setLive(value);
-    try{sessionStorage.setItem('zoolark-live-view',value?'1':'0');}catch{}
-  }
-  useEffect(()=>{
-    const nodes={};
-    for(const key of ['controls','screen','header','scale','footer'])nodes[key]=document.getElementById('board-'+key);
-    setSlots(nodes);
-    try{if(sessionStorage.getItem('zoolark-live-view')==='1')setLive(true);}catch{}
-  },[]);
-  useEffect(()=>{
-    document.body.classList.toggle('board-live',live);
-    if(!live)return;
-    const saved=window.AppState?.currentInstrument;
-    if(window.AppState)window.AppState.currentInstrument='openscope-real';
-    return ()=>{
-      document.body.classList.remove('board-live');
-      if(window.AppState && saved){
-        window.AppState.currentInstrument=saved;window.switchInstrument?.(saved);
-        document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.instrument===saved));
-      }
-    };
-  },[live]);
   const [board,setBoard]=useState(null),[identity,setIdentity]=useState(null),[msg,setMsg]=useState(''),[error,setError]=useState(false);
   const [connection,setConnection]=useState({text:'',failed:false});
   const [busy,setBusy]=useState(false),[acquiring,setAcquiring]=useState(false),[mode,setMode]=useState('A12');
@@ -111,9 +88,6 @@ export default function Bench({initialLive}){
   }
   async function connect(){
     if(lock.current)return;
-    selectLive(true);
-    document.getElementById('serial-config-modal')?.classList.add('hidden');
-    if(!live)setMode(navigation[document.querySelector('.nav-btn.active')?.dataset.instrument]||'A12');
     const generationAtOpen=generation.current;
     let link,ready=false,stage='';
     const report=text=>{
@@ -128,7 +102,6 @@ export default function Bench({initialLive}){
       try {port=await navigator.serial.requestPort({filters:[USB]});}
       catch(e){if(e.name==='NotFoundError')throw new Error('未选择仪器。请确认使用 USB 数据线，并在仪器完成启动后重试。');throw e;}
       if(generationAtOpen!==generation.current)return;
-      if(window.WFLDeviceBridge?.state.mode==='webusb')await window.WFLDeviceBridge.connectDemo();
       report('打开 USB 串口');
       link=new SerialLink(port,e=>{
         if(ready && owner.current===link)drop('串口中断 · '+e.message,true);
@@ -288,51 +261,36 @@ export default function Bench({initialLive}){
   function select(title,value,set,options){
     return <label>{title}<select value={value} onChange={e=>{set(Number(e.target.value));setFrame(null);}}>{options.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>;
   }
-  useEffect(()=>{
-    const enter=()=>{if(!lock.current)void connect();};
-    const click=e=>{
-      const el=e.target.closest?.('button');
-      if(!el)return;
-      if(el.id==='openscope-connect'){e.preventDefault();e.stopImmediatePropagation();enter();return;}
-      if(!live)return;
-      if(el.matches('.nav-btn')){
-        e.preventDefault();e.stopImmediatePropagation();
-        const id=navigation[el.dataset.instrument];if(id)changeMode(id==='A12'&&mode==='A34'?'A34':id);
-      }else if(el.id==='screenshot-btn'||el.id==='export-btn'){
-        e.preventDefault();e.stopImmediatePropagation();
-        if(mode==='FRA'){
-          try{downloadFra(fra,slots.screen.querySelector('.fra-chart'),el.id==='screenshot-btn');}
-          catch(e){message(e.message,true);}
-          return;
+  async function toggleFullscreen(){
+    try{
+      if(document.fullscreenElement)await document.exitFullscreen();
+      else await displayArea.current.requestFullscreen();
+    }catch{message('浏览器未能切换全屏。',true);}
+  }
+  function download(asImage){
+    if(mode==='FRA'){
+      try{downloadFra(fra,screen.querySelector('.fra-chart'),asImage);}
+      catch(e){message(e.message,true);}
+      return;
+    }
+    if(!frame||!plot){message('请先采集一帧数据。');return;}
+    const a=document.createElement('a');
+    if(asImage){
+      a.href=screen.querySelector('canvas').toDataURL('image/png');a.download=mode+'-capture.png';
+    }else{
+      const parts=['channel,time_s,'+(mode==='LA'?'logic':'volts')+'\n'];
+      frame.channels.forEach((ch,i)=>{
+        const name=mode==='LA'?'D'+i:'A'+(i+(mode==='A34'?3:1));
+        for(let start=0;start<ch.length;start+=4096){
+          const lines=[];
+          for(let j=start;j<Math.min(start+4096,ch.length);j++)lines.push([name,j/frame.rate+frame.skew[i],ch[j]].join(','));
+          parts.push(lines.join('\n')+'\n');
         }
-        if(!frame||!plot){message('请先采集一帧数据。');return;}
-        const a=document.createElement('a');
-        if(el.id==='screenshot-btn'){
-          a.href=slots.screen.querySelector('canvas').toDataURL('image/png');a.download=mode+'-capture.png';
-        }else{
-          const parts=['channel,time_s,'+(mode==='LA'?'logic':'volts')+'\n'];
-          frame.channels.forEach((ch,i)=>{
-            const name=mode==='LA'?'D'+i:'A'+(i+(mode==='A34'?3:1));
-            for(let start=0;start<ch.length;start+=4096){
-              const lines=[];
-              for(let j=start;j<Math.min(start+4096,ch.length);j++)lines.push([name,j/frame.rate+frame.skew[i],ch[j]].join(','));
-              parts.push(lines.join('\n')+'\n');
-            }
-          });
-          a.href=URL.createObjectURL(new Blob(parts,{type:'text/csv'}));a.download=mode+'-samples.csv';
-        }
-        a.click();if(el.id==='export-btn')setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-      }
-    };
-    window.addEventListener('openscope-connect',enter);
-    document.addEventListener('click',click,true);
-    return ()=>{window.removeEventListener('openscope-connect',enter);document.removeEventListener('click',click,true);};
-  });
-  useEffect(()=>{
-    if(live)document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',navigation[b.dataset.instrument]===(mode==='A34'?'A12':mode)));
-  },[live,mode,slots]);
-  if(!live || !slots)return null;
-  const portal=(key,content)=>createPortal(content,slots[key]);
+      });
+      a.href=URL.createObjectURL(new Blob(parts,{type:'text/csv'}));a.download=mode+'-samples.csv';
+    }
+    a.click();if(!asImage)setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }
   const scopeControls=<>
       {(mode==='A12'||mode==='A34')&&<label>输入通道组<select value={mode} onChange={e=>changeMode(e.target.value)}><option value="A12">A1 / A2 · MAX1193</option><option value="A34">A3 / A4 · ADC</option></select></label>}
       {mode!=='LA'&&<div className="channel-controls">{visible.map((v,i)=><label key={i} style={{color:i?'#00d4ff':'#ffc107'}}><input type="checkbox" checked={v} onChange={()=>setVisible(visible.map((x,j)=>j===i?!x:x))}/> CH{i+1+(mode==='A34'?2:0)}</label>)}</div>}
@@ -358,27 +316,44 @@ export default function Bench({initialLive}){
         {primary&&<><button disabled={!board||(busy&&!acquiring)||!frame||!visible.some(Boolean)} onClick={autoScale}>自动缩放</button><button disabled={!board||busy} onClick={updateScope}>写入时基与量程</button><button disabled={!board||busy} onClick={readScope}>读取板端参数</button></>}
       </div></>;
   const scopeScreen=<>
-    <Plot frame={frame} scopeGroup={mode==='A12'||auxMode?mode:undefined} onPaint={countPaint} fft={mode==='FFT'} viewScales={auxMode?auxScales:undefined} zoom={auxMode?auxZoom:1} visible={visible} emptyText={board?(acquiring?'正在等待实板采集…':'点击左侧「运行」或「单次」开始采集'):'连接 USB 仪器后可采集波形'} measureHost={slots.controls.querySelector('.board-metrics')}/>
+    <Plot frame={frame} scopeGroup={mode==='A12'||auxMode?mode:undefined} onPaint={countPaint} fft={mode==='FFT'} viewScales={auxMode?auxScales:undefined} zoom={auxMode?auxZoom:1} visible={visible} emptyText={board?(acquiring?'正在等待实板采集…':'点击左侧「运行」或「单次」开始采集'):'连接 USB 仪器后可采集波形'} measureHost={measureHost}/>
     {mode==='A12'&&<div className="fft-container"><label>FFT 频谱分析 <input type="checkbox" checked={sideFFT} onChange={e=>setSideFFT(e.target.checked)}/></label>{sideFFT&&<Plot frame={frame} fft visible={visible} hideMetrics/>}</div>}
   </>;
   const otherControls=mode==='dashboard'?<p>在同一屏添加仪器。示波器和频谱共用一帧采样。</p>:mode==='FRA'?<FraControls
     source={fraSource} onSource={value=>{setFraSource(value);setFra([]);message('');}} board={board} busy={busy}
     running={!!fraJob.current} start={startFra} stop={()=>fraJob.current?.controller.abort()}/>
     :mode==='battery'?<button className="primary" disabled={!board||busy} onClick={()=>run(async()=>setBattery(await board.battery()))}>读取电池</button>
-    :<Outputs key={mode+String(!!board)} kind={mode} board={board} run={run} busy={busy} displayHost={slots.screen}/>;
-  return <>
-    {portal('header',<><span className="board-link-state" title={board?identity.release:undefined}>{board?'Zoolark Pro 已连接':busy?'连接中…':'未连接'}</span>
+    :<Outputs key={mode+String(!!board)} kind={mode} board={board} run={run} busy={busy} displayHost={screen}/>;
+  return <div className="container">
+    <InstrumentHeader mode={mode} onSelect={changeMode}>
+      <span className="board-link-state" title={board?identity.release:undefined}>{board?'Zoolark Pro 已连接':busy?'连接中…':'未连接'}</span>
       <button className="connect-btn" disabled={!board&&busy} onClick={board?disconnect:connect}>{board?'断开 USB':'连接 USB 仪器'}</button>
-      {!board&&!busy&&<button className="btn btn-secondary" onClick={()=>selectLive(false)}>返回演示</button>}</>)}
-    {portal('controls',<><div className="panel-section board-ui"><h3 className="panel-title">控制</h3>
-      {plot?scopeControls:otherControls}
-      {connection.text&&<div role="alert" className={'notice '+(connection.failed?'error':'')}>{connection.text}</div>}
-      {msg&&<div role="status" className={'notice '+(error?'error':'')}>{msg}</div>}
-      </div>{plot&&<div className="panel-section"><h3 className="panel-title">测量</h3><div className="board-metrics"/></div>}</>)}
-    {mode!=='dashboard'&&portal('scale',<>{plot&&primary?<><span className="channel-indicator ch1">CH1 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span className="channel-indicator ch2">CH2 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span>时基 {timeLabel((identity?.state.TDIV_US||TIME_US[td])/1e6)}/div</span></>:<b>{modes[mode]}</b>}
-      {mode==='A12'&&<span>{triggerStatus}</span>}</>)}
-    {portal('screen',<>{plot?scopeScreen:mode==='dashboard'?<Dashboard key={String(!!board)} toolbarHost={slots.scale} board={board} run={run} td={td} vd={vd} trigger={trigger} onBoardScale={requestScale} onVerified={state=>setIdentity(old=>old&&({...old,state}))} cancelRef={dashboardCancel}/>:mode==='FRA'?<FraResults rows={fra}/>
-      :mode==='battery'?<div className="board-card"><h2>电池监测</h2><p>{battery?battery.mv/1000+' V · '+battery.level+' / 4 格':'等待读取电池'}</p></div>:null}</>)}
-    {portal('footer',<><b>OpenScope RP2350B</b><span>USB CDC</span>{frame&&<span>{format(frame.rate)} S/s</span>}<span>{frame?.quality}</span>{plot&&acquiring&&fps!==null&&<span>显示 {fps} 帧/s</span>}</>)}
-  </>;
+    </InstrumentHeader>
+    <main className="main-content">
+      <aside className="control-panel"><div id="board-controls">
+        <div className="panel-section board-ui"><h3 className="panel-title">控制</h3>
+          {plot?scopeControls:otherControls}
+          {connection.text&&<div role="alert" className={'notice '+(connection.failed?'error':'')}>{connection.text}</div>}
+          {msg&&<div role="status" className={'notice '+(error?'error':'')}>{msg}</div>}
+        </div>
+        {plot&&<div className="panel-section"><h3 className="panel-title">测量</h3><div className="board-metrics" ref={setMeasureHost}/></div>}
+      </div></aside>
+      <section className="display-area" ref={displayArea}>
+        <div className="display-header">
+          <div className="display-info"><div id="board-scale" ref={setToolbar}>
+            {mode!=='dashboard'&&<>{plot&&primary?<><span className="channel-indicator ch1">CH1 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span className="channel-indicator ch2">CH2 · {identity?.state.VIEW_MV||VDIV_MV[vd]} mV/div</span><span>时基 {timeLabel((identity?.state.TDIV_US||TIME_US[td])/1e6)}/div</span></>:<b>{modes[mode]}</b>}
+              {mode==='A12'&&<span>{triggerStatus}</span>}</>}
+          </div></div>
+          <DisplayActions onDownload={download} onFullscreen={toggleFullscreen}/>
+        </div>
+        <div id="board-screen" ref={setScreen}>
+          {plot?scopeScreen:mode==='dashboard'&&toolbar?<Dashboard key={String(!!board)} toolbarHost={toolbar} board={board} run={run} td={td} vd={vd} trigger={trigger} onBoardScale={requestScale} onVerified={state=>setIdentity(old=>old&&({...old,state}))} cancelRef={dashboardCancel}/>:mode==='FRA'?<FraResults rows={fra}/>
+            :mode==='battery'?<div className="board-card"><h2>电池监测</h2><p>{battery?battery.mv/1000+' V · '+battery.level+' / 4 格':'等待读取电池'}</p></div>:null}
+        </div>
+      </section>
+    </main>
+    <footer className="status-bar"><div id="board-footer">
+      <b>OpenScope RP2350B</b><span>USB CDC</span>{frame&&<span>{format(frame.rate)} S/s</span>}<span>{frame?.quality}</span>{plot&&acquiring&&fps!==null&&<span>显示 {fps} 帧/s</span>}
+    </div></footer>
+  </div>;
 }

@@ -1,2 +1,1 @@
-import ZooLarkView from '../ZooLarkView';
-export default function InstrumentPage(){ return <ZooLarkView initialLive/>; }
+export {default} from './Bench';

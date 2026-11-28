@@ -1,6 +1,4 @@
-#board-header,#board-screen,#board-controls,#board-scale,#board-footer{display:none}
 body.board-live .control-panel{display:flex!important;min-width:0;flex-shrink:0}
-.board-live .control-panel>:not(#board-controls),.board-live .display-area>:not(.display-header):not(#board-screen),.board-live .header-actions>:not(#board-header),.board-live .display-info>:not(#board-scale),.board-live .status-bar>:not(#board-footer),.board-live #wfl-device-summary,.board-live #ai-panel,.board-live .nav-btn[data-instrument="jtag-fpga"],.board-live .nav-btn[data-instrument="kxtj3"]{display:none!important}
 .board-live .display-area{display:flex!important;min-width:0}
 .board-live .display-area>.display-header{order:-1}
 .board-live .display-info{display:flex!important}
@@ -63,7 +61,7 @@ body.board-live .control-panel{display:flex!important;min-width:0;flex-shrink:0}
 .board-ui .trigger-row .quantity{flex:1.65 1 0;min-width:0;gap:3px;grid-template-columns:minmax(0,1fr) auto}
 .board-ui .trigger-row select,.board-ui .trigger-row input[type=number]{min-width:0;width:100%;height:34px;padding:4px;font-size:13px}
 @media(max-width:768px){
-  .board-live .control-panel:has(.trigger-row){position:static;transform:none;height:auto;z-index:auto}
+  .board-live .control-panel{position:static;transform:none;height:auto;z-index:auto}
 }
 .trigger-row input[type=number]{appearance:textfield}
 .trigger-row input::-webkit-inner-spin-button,.trigger-row input::-webkit-outer-spin-button{-webkit-appearance:none}

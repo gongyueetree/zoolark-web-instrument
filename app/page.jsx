@@ -1,2 +1,1 @@
-import ZooLarkView from './ZooLarkView';
-export default function HomePage(){ return <ZooLarkView/>; }
+export {default} from './openscope/Bench';
