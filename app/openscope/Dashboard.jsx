@@ -60,7 +60,7 @@ const visibility={both:[true,true],1:[true,false],2:[false,true]};
 const DashboardTrace=memo(function DashboardTrace({feed,panel,emptyText}){
   const kind=panel.kind==='FFT'?'A12':panel.kind;
   const frame=useSyncExternalStore(feed.subscribe,()=>feed.frames[kind]||null,()=>null);
-  return <Plot frame={frame} fft={panel.kind==='FFT'} hideMetrics deferOffscreen
+  return <Plot frame={frame} scopeGroup={isScope(panel.kind)?panel.kind:undefined} fft={panel.kind==='FFT'} hideMetrics deferOffscreen
     visible={visibility[panel.channel]} viewScales={isScope(panel.kind)?panel.scales||defaultScales:undefined}
     zoom={isScope(panel.kind)?panel.zoom||1:1} onPaint={kind==='A12'?feed.countPaint:undefined} emptyText={emptyText}/>;
 });

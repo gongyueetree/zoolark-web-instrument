@@ -12,9 +12,18 @@ function frequencyLabel(hz){
   if(rounded>=1e3)return format(rounded/1e3)+' kHz';
   return format(rounded)+' Hz';
 }
-function rmsLabel(volts){
+function voltageLabel(volts){
   const rounded=Number(volts.toPrecision(3));
   return rounded>0&&rounded<1?format(rounded*1000)+' mV':format(rounded)+' V';
+}
+const measurements=new WeakMap();
+function channelMeasurement(frame,channel){
+  let cached=measurements.get(frame);
+  if(!cached){
+    cached=[];
+    measurements.set(frame,cached);
+  }
+  return cached[channel]??=stats(frame.channels[channel],frame.rate);
 }
 const spectra=new WeakMap();
 function spectrumFor(frame,channel){
@@ -25,7 +34,7 @@ function spectrumFor(frame,channel){
 }
 export const timeLabel=s=>s<.001?format(s*1e6)+' µs':s<1?format(s*1e3)+' ms':format(s)+' s';
 
-export default function Plot({frame,fft,visible,measureHost,hideMetrics=false,emptyText,viewScales,zoom=1,onPaint,deferOffscreen=false}) {
+export default function Plot({frame,fft,visible,scopeGroup,measureHost,hideMetrics=false,emptyText,viewScales,zoom=1,onPaint,deferOffscreen=false}) {
   const ref=useRef(null),redraw=useRef(null),lastFrame=useRef(null);
   const [onScreen,setOnScreen]=useState(!deferOffscreen);
   useEffect(()=>{
@@ -34,10 +43,15 @@ export default function Plot({frame,fft,visible,measureHost,hideMetrics=false,em
     observer.observe(ref.current);
     return ()=>observer.disconnect();
   },[deferOffscreen]);
-  const names=frame?.group==='LA'?['D0','D1','D2','D3']:frame?.group==='A34'?['A3','A4']:['A1','A2'];
+  const group=scopeGroup??frame?.group;
+  const names=group==='LA'?['D0','D1','D2','D3']:group==='A34'?['A3','A4']:['A1','A2'];
   const specs=useMemo(()=>fft&&frame&&onScreen
     ?frame.channels.map((_,ch)=>visible?.[ch]===false?null:spectrumFor(frame,ch)):null,[frame,fft,onScreen,visible]);
-  const metrics=useMemo(()=>measureHost&&!hideMetrics?frame?.channels.map(ch=>stats(ch,frame.rate)):null,[frame,measureHost,hideMetrics]);
+  const sidebar=!!measureHost&&!hideMetrics;
+  const metrics=useMemo(()=>{
+    if(!frame||(!sidebar&&!(scopeGroup&&onScreen)))return null;
+    return frame.channels.map((_,i)=>sidebar||visible?.[i]!==false?channelMeasurement(frame,i):null);
+  },[frame,sidebar,scopeGroup,onScreen,visible]);
   useLayoutEffect(()=>{
     if(!onScreen){redraw.current=null;return;}
     const canvas=ref.current;
@@ -116,13 +130,25 @@ export default function Plot({frame,fft,visible,measureHost,hideMetrics=false,em
     lastFrame.current=frame;
   },[frame,fft,specs,visible,viewScales,zoom,onPaint,onScreen]);
   useEffect(()=>{const observer=new ResizeObserver(()=>redraw.current?.());observer.observe(ref.current);return ()=>observer.disconnect();},[]);
-  return <><div className="plot-wrap"><canvas ref={ref} aria-label={fft?'采集数据频谱':'实际采样波形'}/>{!frame && <div className="plot-empty">{emptyText||'等待读取实板波形'}</div>}</div>
+  return <>
+    {scopeGroup&&names.some((_,i)=>visible?.[i]!==false)&&<div className="trace-measurements" role="group" aria-label="示波器实测值">
+      {names.map((name,i)=>{
+        if(visible?.[i]===false)return null;
+        const m=metrics?.[i];
+        return <span className="trace-channel" key={name}>
+          <strong style={{color:colors[i]}}>{name}</strong>
+          <span>频率 <b>{frequencyLabel(m?.hz)}</b></span>
+          <span>峰峰值 <b>{m?voltageLabel(m.max-m.min)+'pp':'—'}</b></span>
+        </span>;
+      })}
+    </div>}
+    <div className="plot-wrap"><canvas ref={ref} aria-label={fft?'采集数据频谱':'实际采样波形'}/>{!frame && <div className="plot-empty">{emptyText||'等待读取实板波形'}</div>}</div>
     {frame && measureHost && !hideMetrics && createPortal(<div className="measure"><div><small>实际采样率 / 通道</small><b>{format(frame.rate)} S/s</b></div><div><small>帧内样点 / 通道</small><b>{frame.channels[0].length.toLocaleString()}</b></div>
     {metrics.map((m,i)=><div key={i}><small style={{color:colors[i]}}>{names[i]} · {frame.group==='LA'?'高电平占比':'峰峰值'}</small><b>{frame.group==='LA'?format(m.mean*100)+' %':format(m.max-m.min)+' Vpp'}</b></div>)}
     {frame.group!=='LA'&&<table className="scope-readings" aria-label="通道频率和有效值">
       <thead><tr><th scope="col">通道</th><th scope="col">频率</th><th scope="col">RMS</th></tr></thead>
       <tbody>{metrics.map((m,i)=><tr key={names[i]}><th scope="row" style={{color:colors[i]}}>{names[i]}</th>
-        <td>{frequencyLabel(m.hz)}</td><td>{rmsLabel(m.rms)}</td></tr>)}</tbody>
+        <td>{frequencyLabel(m.hz)}</td><td>{voltageLabel(m.rms)}</td></tr>)}</tbody>
     </table>}
     </div>,measureHost)}
   </>;

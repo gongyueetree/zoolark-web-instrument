@@ -307,7 +307,7 @@ export default function Bench({initialLive}){
         {primary&&<><button disabled={!board||(busy&&!acquiring)||!frame||!visible.some(Boolean)} onClick={autoScale}>自动缩放</button><button disabled={!board||busy} onClick={updateScope}>写入时基与量程</button><button disabled={!board||busy} onClick={readScope}>读取板端参数</button></>}
       </div></>;
   const scopeScreen=<>
-    <Plot frame={frame} onPaint={countPaint} fft={mode==='FFT'} viewScales={auxMode?auxScales:undefined} zoom={auxMode?auxZoom:1} visible={visible} emptyText={board?(acquiring?'正在等待实板采集…':'点击左侧「运行」或「单次」开始采集'):'连接 USB 仪器后可采集波形'} measureHost={slots.controls.querySelector('.board-metrics')}/>
+    <Plot frame={frame} scopeGroup={mode==='A12'||auxMode?mode:undefined} onPaint={countPaint} fft={mode==='FFT'} viewScales={auxMode?auxScales:undefined} zoom={auxMode?auxZoom:1} visible={visible} emptyText={board?(acquiring?'正在等待实板采集…':'点击左侧「运行」或「单次」开始采集'):'连接 USB 仪器后可采集波形'} measureHost={slots.controls.querySelector('.board-metrics')}/>
     {mode==='A12'&&<div className="fft-container"><label>FFT 频谱分析 <input type="checkbox" checked={sideFFT} onChange={e=>setSideFFT(e.target.checked)}/></label>{sideFFT&&<Plot frame={frame} fft visible={visible} hideMetrics/>}</div>}
   </>;
   const otherControls=mode==='dashboard'?<p>在同一屏添加仪器。示波器和频谱共用一帧采样。</p>:mode==='FRA'?<><p>外部正弦源接被测电路输入，A1 测参考，A2 测响应。</p>

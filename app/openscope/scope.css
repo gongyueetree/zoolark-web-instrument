@@ -35,6 +35,9 @@ body.board-live .control-panel{display:flex!important;min-width:0;flex-shrink:0}
 .board-live .plot-wrap{position:relative;flex:1;min-height:160px}
 .board-live .plot-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .board-live .plot-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--text-secondary);pointer-events:none}
+.trace-measurements{display:flex;flex:none;flex-wrap:wrap;gap:2px 16px;padding:3px 10px;background:var(--bg-darker);color:var(--text-secondary);font-size:12px;line-height:20px}
+.trace-channel{display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap}
+.trace-channel b{display:inline-block;min-width:9ch;color:var(--text-primary);font:600 12px/20px ui-monospace,monospace;font-variant-numeric:tabular-nums}
 .board-live .measure{display:grid;gap:6px}.board-live .measure>div{display:flex;justify-content:space-between;gap:5px;background:var(--bg-control);padding:8px;border-radius:4px}
 .board-live .measure b{font:600 12px ui-monospace,monospace;color:var(--primary-color)}
 .scope-readings{width:100%;table-layout:fixed;border-collapse:collapse;white-space:nowrap}
