@@ -1379,6 +1379,10 @@ function updateNetworkMarkers() {
     document.getElementById('network-bandwidth').textContent = formatFrequency(bandwidth);
 }
 
+function demoViewActive(instrument) {
+    return AppState.currentInstrument === instrument && !document.body.classList.contains('board-live');
+}
+
 // 初始化所有Canvas
 function initializeAllCanvas() {
     initializeOscilloscopeCanvas();
@@ -1404,7 +1408,7 @@ function initializeOscilloscopeCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'oscilloscope') {
+        if (!demoViewActive('oscilloscope')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1453,7 +1457,7 @@ function initializeGeneratorCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'waveform-generator') {
+        if (!demoViewActive('waveform-generator')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1491,7 +1495,7 @@ function initializePWMCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'pwm-generator') {
+        if (!demoViewActive('pwm-generator')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1597,7 +1601,7 @@ function initializeLogicCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'logic-analyzer') {
+        if (!demoViewActive('logic-analyzer')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1706,7 +1710,7 @@ function initializeSpectrumCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'spectrum-analyzer') {
+        if (!demoViewActive('spectrum-analyzer')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1880,7 +1884,7 @@ function initializePowerCanvas() {
         canvas.height = 150;
 
         function draw() {
-            if (AppState.currentInstrument !== 'power-supply') {
+            if (!demoViewActive('power-supply')) {
                 requestAnimationFrame(draw);
                 return;
             }
@@ -1939,7 +1943,7 @@ function initializeNetworkAnalyzerCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'network-analyzer') {
+        if (!demoViewActive('network-analyzer')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -3202,7 +3206,7 @@ function createPanelElement(panel) {
     // 初始化canvas
     setTimeout(() => {
         const canvas = div.querySelector('.panel-canvas');
-        if (canvas) {
+        if (canvas?.isConnected) {
             canvas.width = canvas.parentElement.clientWidth;
             canvas.height = canvas.parentElement.clientHeight;
 
@@ -3445,6 +3449,11 @@ function initPanelCanvas(panel, canvas) {
 
     // 根据类型绘制示例波形
     function animate() {
+        if (!canvas.isConnected) return;
+        if (!demoViewActive('custom-dashboard')) {
+            requestAnimationFrame(animate);
+            return;
+        }
         ctx.fillStyle = '#060a1a';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 

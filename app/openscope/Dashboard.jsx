@@ -1,5 +1,6 @@
 'use client';
 import {memo,useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
+import {createPortal} from 'react-dom';
 import {DashboardSampler} from '../../src/openscope/dashboard-capture.mjs';
 import {TIME_US} from '../../src/openscope/frames.mjs';
 import {scopeTrigger} from '../../src/openscope/display.mjs';
@@ -76,7 +77,7 @@ function FrameRates({feed}){
   },[feed]);
   return <small>A1/A2 接收 {rates?.[0]??'—'} 帧/s · 绘制 {rates?.[1]??'—'} 帧/s</small>;
 }
-export default function Dashboard({board,run,td,vd,trigger,onBoardScale,onVerified,cancelRef}){
+export default function Dashboard({toolbarHost,board,run,td,vd,trigger,onBoardScale,onVerified,cancelRef}){
   const [panels,setPanels]=useState(loadLayout),[add,setAdd]=useState('A12');
   const [captureMode,setCaptureMode]=useState('idle'),[battery,setBattery]=useState(null);
   const [feed]=useState(()=>new FrameFeed());
@@ -194,11 +195,11 @@ export default function Dashboard({board,run,td,vd,trigger,onBoardScale,onVerifi
   }
   function update(id,patch){setPanels(old=>old.map(p=>p.id===id?{...p,...patch}:p));}
   return <section className="live-dashboard">
-    <div className="dashbar"><label>添加仪器 <select value={add} onChange={e=>setAdd(e.target.value)}>{Object.entries(names).map(([k,n])=><option key={k} value={k}>{n}</option>)}</select></label>
+    {createPortal(<div className="dashbar" role="group" aria-label="仪表板工具"><b>自定义仪表板</b><label>添加仪器 <select value={add} onChange={e=>setAdd(e.target.value)}>{Object.entries(names).map(([k,n])=><option key={k} value={k}>{n}</option>)}</select></label>
       <button disabled={['wav','pwm','dc','battery'].includes(add)&&panels.some(p=>p.kind===add)} onClick={()=>setPanels(old=>[...old,{id:nextId.current++,kind:add,wide:false,channel:'both'}])}>添加面板</button>
       {acquisitionButtons(false)}
       {captureMode==='continuous'&&primary&&<FrameRates feed={feed}/>}
-    </div>
+    </div>,toolbarHost)}
     {!panels.length&&<p>请选择仪器并添加面板。</p>}
     <div className="live-grid">{panels.map((p,index)=><article key={p.id} className={isScope(p.kind)?'scope-card':''} style={{'--panel-span':widths[index]}} aria-label={names[p.kind]+'面板'}
       onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();reorder(dragged.current,p.id);dragged.current=null;}}>
