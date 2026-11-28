@@ -367,7 +367,7 @@ export default function Bench({initialLive}){
     :mode==='battery'?<button className="primary" disabled={!board||busy} onClick={()=>run(async()=>setBattery(await board.battery()))}>读取电池</button>
     :<Outputs key={mode+String(!!board)} kind={mode} board={board} run={run} busy={busy} displayHost={slots.screen}/>;
   return <>
-    {portal('header',<><span className="board-link-state">{board?identity.release+' 已连接':busy?'连接中…':'未连接'}</span>
+    {portal('header',<><span className="board-link-state" title={board?identity.release:undefined}>{board?'Zoolark Pro 已连接':busy?'连接中…':'未连接'}</span>
       <button className="connect-btn" disabled={!board&&busy} onClick={board?disconnect:connect}>{board?'断开 USB':'连接 USB 仪器'}</button>
       {!board&&!busy&&<button className="btn btn-secondary" onClick={()=>selectLive(false)}>返回演示</button>}</>)}
     {portal('controls',<><div className="panel-section board-ui"><h3 className="panel-title">控制</h3>
