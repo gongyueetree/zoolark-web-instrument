@@ -24,7 +24,7 @@ export const legacyBodyHtml = String.raw`
                                 <line x1="14" y1="10" x2="14" y2="14" stroke-width="2"/>
                                 <line x1="18" y1="10" x2="18" y2="14" stroke-width="2"/>
                             </svg>
-                            串口 (Serial)
+                            OpenScope / R144 · R149
                         </button>
                         <button class="connection-type-btn" data-type="usb">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -32,7 +32,7 @@ export const legacyBodyHtml = String.raw`
                                 <circle cx="7" cy="17" r="2"/>
                                 <circle cx="17" cy="17" r="2"/>
                             </svg>
-                            USB
+                            WFL2 / WebUSB
                         </button>
                         <button class="connection-type-btn" data-type="wifi">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -45,77 +45,7 @@ export const legacyBodyHtml = String.raw`
 
                 <!-- 串口配置 -->
                 <div id="serial-config" class="config-panel">
-                    <div class="form-group">
-                        <label>串口端口</label>
-                        <select class="form-control" id="serial-port">
-                            <option value="">选择串口...</option>
-                            <option value="COM1">COM1</option>
-                            <option value="COM2">COM2</option>
-                            <option value="COM3">COM3</option>
-                            <option value="COM4">COM4</option>
-                            <option value="/dev/ttyUSB0">/dev/ttyUSB0</option>
-                            <option value="/dev/ttyUSB1">/dev/ttyUSB1</option>
-                        </select>
-                        <button class="btn-scan" id="scan-ports">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" stroke-width="2"/>
-                            </svg>
-                            扫描
-                        </button>
-                    </div>
-
-                    <div class="form-group">
-                        <label>波特率 (Baud Rate)</label>
-                        <select class="form-control" id="baud-rate">
-                            <option value="9600">9600</option>
-                            <option value="19200">19200</option>
-                            <option value="38400">38400</option>
-                            <option value="57600">57600</option>
-                            <option value="115200" selected>115200</option>
-                            <option value="230400">230400</option>
-                            <option value="460800">460800</option>
-                            <option value="921600">921600</option>
-                        </select>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>数据位 (Data Bits)</label>
-                            <select class="form-control" id="data-bits">
-                                <option value="7">7</option>
-                                <option value="8" selected>8</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label>停止位 (Stop Bits)</label>
-                            <select class="form-control" id="stop-bits">
-                                <option value="1" selected>1</option>
-                                <option value="1.5">1.5</option>
-                                <option value="2">2</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>校验位 (Parity)</label>
-                        <select class="form-control" id="parity">
-                            <option value="none" selected>None (无)</option>
-                            <option value="even">Even (偶校验)</option>
-                            <option value="odd">Odd (奇校验)</option>
-                            <option value="mark">Mark</option>
-                            <option value="space">Space</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>流控制 (Flow Control)</label>
-                        <select class="form-control" id="flow-control">
-                            <option value="none" selected>None (无)</option>
-                            <option value="hardware">Hardware (RTS/CTS)</option>
-                            <option value="software">Software (XON/XOFF)</option>
-                        </select>
-                    </div>
+                    <p>OpenScope RP2350B 使用 HW2.1 R144 或 R149 固件的 USB CDC 串口。连接后可读取仪器身份、采集波形和设置输出。</p>
                 </div>
 
                 <!-- USB配置 -->
@@ -242,6 +172,8 @@ export const legacyBodyHtml = String.raw`
                 </button>
             </nav>
             <div class="header-actions">
+                <button class="connect-btn" id="openscope-connect" type="button">OpenScope 实板</button>
+                <div id="board-header"></div>
                 <button class="icon-btn" id="ai-assistant-btn" title="AI助手">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <circle cx="12" cy="12" r="10" stroke-width="2"/>
@@ -265,6 +197,7 @@ export const legacyBodyHtml = String.raw`
         <main class="main-content">
             <!-- 左侧控制面板 -->
             <aside class="control-panel">
+                <div id="board-controls"></div>
                 <div class="panel-section">
                     <h3 class="panel-title">控制</h3>
 
@@ -701,8 +634,9 @@ export const legacyBodyHtml = String.raw`
 
             <!-- 中间显示区域 -->
             <section class="display-area">
+                <div id="board-screen"></div>
                 <div class="display-header">
-                    <div class="display-info">
+                    <div class="display-info"><div id="board-scale"></div>
                         <span class="channel-indicator ch1">CH1: 5.00V/div</span>
                         <span class="channel-indicator ch2">CH2: 2.00V/div</span>
                         <span class="time-indicator">时基: 1ms/div</span>
@@ -1016,7 +950,7 @@ export const legacyBodyHtml = String.raw`
         </main>
 
         <!-- 状态栏 -->
-        <footer class="status-bar">
+        <footer class="status-bar"><div id="board-footer"></div>
             <div class="status-item">
                 <span class="status-label">采样率:</span>
                 <span class="status-value">45.00 MS/s</span>

@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: 22
       - name: Run transport/protocol smoke test
-        run: node scripts/device-stack-smoke.mjs
+        run: npm test
 
   web-build:
     name: Next.js build

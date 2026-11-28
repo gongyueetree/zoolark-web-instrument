@@ -289,20 +289,6 @@ function initializeSerialModal() {
         });
     });
 
-    // 扫描串口
-    document.getElementById('scan-ports')?.addEventListener('click', async () => {
-        if ('serial' in navigator) {
-            try {
-                const port = await navigator.serial.requestPort();
-                alert('已选择串口设备');
-            } catch (err) {
-                console.log('用户取消了串口选择');
-            }
-        } else {
-            alert('您的浏览器不支持 Web Serial API\\n请使用 Chrome/Edge 浏览器');
-        }
-    });
-
     // 扫描USB设备
     document.getElementById('scan-usb')?.addEventListener('click', async () => {
         if ('usb' in navigator) {
@@ -340,20 +326,15 @@ function initializeSerialModal() {
 
     // 连接设备
     connectDeviceBtn.addEventListener('click', () => {
-        // 保存完整的UART配置
-        AppState.serialConfig.port = document.getElementById('serial-port')?.value || '';
-        AppState.serialConfig.baudRate = parseInt(document.getElementById('baud-rate')?.value || 115200);
-        AppState.serialConfig.dataBits = parseInt(document.getElementById('data-bits')?.value || 8);
-        AppState.serialConfig.stopBits = parseFloat(document.getElementById('stop-bits')?.value || 1);
-        AppState.serialConfig.parity = document.getElementById('parity')?.value || 'none';
-        AppState.serialConfig.flowControl = document.getElementById('flow-control')?.value || 'none';
+        if (AppState.serialConfig.type === 'serial') {
+            window.dispatchEvent(new Event('openscope-connect'));
+            return;
+        }
 
         // 关闭弹窗并连接
         modal.classList.add('hidden');
         toggleConnection();
 
-        // 在控制台显示配置信息
-        console.log('UART配置已保存:', AppState.serialConfig);
     });
 }
 
@@ -1398,6 +1379,10 @@ function updateNetworkMarkers() {
     document.getElementById('network-bandwidth').textContent = formatFrequency(bandwidth);
 }
 
+function demoViewActive(instrument) {
+    return AppState.currentInstrument === instrument && !document.body.classList.contains('board-live');
+}
+
 // 初始化所有Canvas
 function initializeAllCanvas() {
     initializeOscilloscopeCanvas();
@@ -1423,7 +1408,7 @@ function initializeOscilloscopeCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'oscilloscope') {
+        if (!demoViewActive('oscilloscope')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1472,7 +1457,7 @@ function initializeGeneratorCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'waveform-generator') {
+        if (!demoViewActive('waveform-generator')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1510,7 +1495,7 @@ function initializePWMCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'pwm-generator') {
+        if (!demoViewActive('pwm-generator')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1616,7 +1601,7 @@ function initializeLogicCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'logic-analyzer') {
+        if (!demoViewActive('logic-analyzer')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1725,7 +1710,7 @@ function initializeSpectrumCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'spectrum-analyzer') {
+        if (!demoViewActive('spectrum-analyzer')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -1899,7 +1884,7 @@ function initializePowerCanvas() {
         canvas.height = 150;
 
         function draw() {
-            if (AppState.currentInstrument !== 'power-supply') {
+            if (!demoViewActive('power-supply')) {
                 requestAnimationFrame(draw);
                 return;
             }
@@ -1958,7 +1943,7 @@ function initializeNetworkAnalyzerCanvas() {
     window.addEventListener('resize', resizeCanvas);
 
     function draw() {
-        if (AppState.currentInstrument !== 'network-analyzer') {
+        if (!demoViewActive('network-analyzer')) {
             requestAnimationFrame(draw);
             return;
         }
@@ -2216,6 +2201,7 @@ function drawTriggerLine(ctx, width, height) {
 
 // 数据生成
 function generateWaveformData() {
+    if (document.body.classList.contains('board-live')) return;
     const samples = 1000;
     const frequency = AppState.waveformGenerator.frequency;  // 已经是Hz
     const amplitude = AppState.waveformGenerator.amplitude;  // 峰值电压
@@ -3220,7 +3206,7 @@ function createPanelElement(panel) {
     // 初始化canvas
     setTimeout(() => {
         const canvas = div.querySelector('.panel-canvas');
-        if (canvas) {
+        if (canvas?.isConnected) {
             canvas.width = canvas.parentElement.clientWidth;
             canvas.height = canvas.parentElement.clientHeight;
 
@@ -3463,6 +3449,11 @@ function initPanelCanvas(panel, canvas) {
 
     // 根据类型绘制示例波形
     function animate() {
+        if (!canvas.isConnected) return;
+        if (!demoViewActive('custom-dashboard')) {
+            requestAnimationFrame(animate);
+            return;
+        }
         ctx.fillStyle = '#060a1a';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 

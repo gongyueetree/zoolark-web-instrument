@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "check:device": "node scripts/device-stack-smoke.mjs",
-    "test": "npm run check:device"
+    "test": "npm run check:device && node --test scripts/openscope.test.mjs"
   },
   "dependencies": {
     "next": "16.2.11",
